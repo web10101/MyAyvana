@@ -1,0 +1,879 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>My Ayvana</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0F1117;--card:#1A1D28;--card2:#222636;--amber:#F59E0B;--amber2:#E8930C;--amber-dim:rgba(245,158,11,.13);--cream:#EEE9E3;--muted:#7B828F;--green:#10B981;--red:#EF4444;--border:rgba(255,255,255,.08);--radius:16px;}
+*{box-sizing:border-box;margin:0;padding:0;}
+html{background:#0F1117 !important;height:100%;}
+body{height:100%;background:#0F1117 !important;color:#EEE9E3;font-family:'DM Sans',sans-serif;overflow:hidden;}
+
+/* LOGIN */
+#login-screen{position:fixed;inset:0;z-index:100;background:linear-gradient(160deg,#04060b 0%,#0e0903 60%,#060a0e 100%);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px 24px;}
+.login-logo{font-family:'Playfair Display',serif;font-size:36px;color:var(--amber);text-align:center;margin-bottom:6px;letter-spacing:1px;}
+.login-sub{font-size:13px;color:var(--muted);letter-spacing:3px;text-transform:uppercase;margin-bottom:48px;}
+.login-card{background:rgba(26,29,40,.85);border:1px solid var(--border);border-radius:24px;padding:32px 28px;width:100%;max-width:380px;}
+.lbl{font-size:11px;color:var(--muted);letter-spacing:2px;text-transform:uppercase;margin-bottom:8px;display:block;}
+.linput{width:100%;background:rgba(255,255,255,.05);border:1px solid var(--border);border-radius:12px;padding:14px 16px;font-family:'DM Sans',sans-serif;font-size:15px;color:var(--cream);margin-bottom:20px;outline:none;transition:border-color .2s;}
+.linput:focus{border-color:var(--amber);}
+.lbtn{width:100%;background:var(--amber);border:none;border-radius:12px;padding:16px;font-family:'DM Sans',sans-serif;font-size:16px;font-weight:600;color:#000;cursor:pointer;margin-top:4px;}
+.lerr{color:var(--red);font-size:13px;text-align:center;margin-top:12px;min-height:18px;}
+.ldecor{position:absolute;border-radius:50%;filter:blur(80px);pointer-events:none;}
+
+/* APP */
+#app{display:none;height:100vh;flex-direction:column;overflow:hidden;background:#0F1117;}
+#app.visible{display:flex;}
+
+/* TAB BAR */
+.tab-bar{display:flex;background:#1A1D28;border-top:1px solid rgba(255,255,255,.08);padding:8px 0 max(8px,env(safe-area-inset-bottom));flex-shrink:0;}
+.tab-item{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer;padding:4px 2px;}
+.tab-icon{font-size:20px;line-height:1;}
+.tab-lbl{font-size:9px;color:var(--muted);letter-spacing:.5px;text-transform:uppercase;}
+.tab-item.active .tab-lbl{color:var(--amber);}
+.tab-item.active .tab-icon{filter:drop-shadow(0 0 6px var(--amber));}
+
+/* SCREENS */
+.screen{display:none;flex:1;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;background:#0F1117;}
+.screen.active{display:flex;flex-direction:column;background:#0F1117;}
+
+/* COMMON */
+.ph{padding:20px 20px 12px;}
+.pt{font-family:'Playfair Display',serif;font-size:26px;color:var(--cream);}
+.ps{font-size:13px;color:var(--muted);margin-top:2px;}
+.card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:18px;margin:0 16px 12px;}
+.abtn{background:var(--amber);color:#000;border:none;border-radius:10px;padding:10px 18px;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:600;cursor:pointer;transition:background .2s;}
+.abtn:hover{background:var(--amber2);}
+.gbtn{background:rgba(255,255,255,.07);color:var(--cream);border:1px solid var(--border);border-radius:10px;padding:9px 16px;font-family:'DM Sans',sans-serif;font-size:14px;cursor:pointer;}
+.gbtn:hover{background:rgba(255,255,255,.12);}
+.dbtn{background:rgba(239,68,68,.15);color:var(--red);border:1px solid rgba(239,68,68,.3);border-radius:10px;padding:9px 16px;font-family:'DM Sans',sans-serif;font-size:14px;cursor:pointer;}
+.badge{display:inline-block;border-radius:20px;padding:3px 10px;font-size:11px;font-weight:600;}
+.bs{background:rgba(59,130,246,.2);color:#60A5FA;}
+.bb{background:rgba(139,92,246,.2);color:#A78BFA;}
+.fi{width:100%;background:rgba(255,255,255,.05);border:1px solid var(--border);border-radius:10px;padding:11px 14px;font-family:'DM Sans',sans-serif;font-size:14px;color:var(--cream);outline:none;transition:border-color .2s;}
+.fi:focus{border-color:var(--amber);}
+.fl{font-size:12px;color:var(--muted);margin-bottom:6px;}
+.fg{margin-bottom:16px;}
+.div{height:1px;background:var(--border);margin:12px 0;}
+.ibt{background:rgba(255,255,255,.07);border:none;border-radius:8px;width:32px;height:32px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:15px;}
+
+/* MODAL */
+.mo{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:50;align-items:flex-end;justify-content:center;}
+.mo.open{display:flex;}
+.ms{background:var(--card);border-radius:24px 24px 0 0;width:100%;max-width:600px;padding:28px 24px max(28px,env(safe-area-inset-bottom));max-height:90vh;overflow-y:auto;}
+.mt{font-family:'Playfair Display',serif;font-size:20px;margin-bottom:20px;}
+.ma{display:flex;gap:10px;margin-top:20px;}
+.ma button{flex:1;}
+
+/* HOME */
+.banner-ph{width:72%;aspect-ratio:16/7;border-radius:20px;background:linear-gradient(135deg,#0b0803,#130b02,#080b0d);display:flex;flex-direction:column;align-items:center;justify-content:center;box-shadow:0 12px 40px rgba(245,158,11,.2);border:1px solid rgba(245,158,11,.15);}
+.banner-ph span{font-family:'Playfair Display',serif;font-size:22px;color:var(--amber);letter-spacing:2px;}
+.banner-ph small{font-size:10px;color:var(--muted);letter-spacing:3px;text-transform:uppercase;margin-top:4px;}
+.sc{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 12px;text-align:center;}
+.sn{font-size:24px;font-weight:700;color:var(--amber);}
+.sl{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-top:2px;}
+.pc{margin:0 16px 12px;background:linear-gradient(135deg,#0e0c02,#160e02);border:1px solid rgba(245,158,11,.2);border-radius:var(--radius);padding:20px;}
+.qa-tile{border-radius:16px;padding:18px;cursor:pointer;transition:transform .15s;border:1px solid transparent;}
+.qa-tile:active{transform:scale(.97);}
+.wn-btn{background:var(--card);border:1px solid var(--border);border-radius:8px;width:32px;height:32px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:16px;color:var(--muted);}
+.av{width:38px;height:38px;border-radius:50%;background:var(--amber-dim);border:2px solid rgba(245,158,11,.4);display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;color:var(--amber);flex-shrink:0;}
+
+/* SCHEDULE day pills */
+.day-pill-row{display:flex;gap:6px;padding:0 16px 14px;overflow-x:auto;scrollbar-width:none;}
+.day-pill-row::-webkit-scrollbar{display:none;}
+.dpill{flex-shrink:0;display:flex;flex-direction:column;align-items:center;padding:10px 14px;border-radius:14px;cursor:pointer;border:1px solid var(--border);background:var(--card);transition:all .18s;min-width:58px;}
+.dpill.active{background:var(--amber);border-color:var(--amber);}
+.dpill-n{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);}
+.dpill.active .dpill-n{color:#000;}
+.dpill-d{font-size:18px;font-weight:700;color:var(--cream);}
+.dpill.active .dpill-d{color:#000;}
+.dpill-c{font-size:10px;color:var(--amber);margin-top:1px;}
+.dpill.active .dpill-c{color:rgba(0,0,0,.6);}
+
+/* schedule cards */
+.shift-card{background:var(--card);border:1px solid rgba(245,158,11,.2);border-radius:14px;padding:14px 16px;margin:0 16px 8px;display:flex;align-items:center;gap:12px;}
+.add-member-card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px 16px;margin:0 16px 8px;display:flex;align-items:center;gap:12px;cursor:pointer;transition:border-color .18s;}
+.add-member-card:hover{border-color:rgba(245,158,11,.4);}
+.sec-title{font-size:11px;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;padding:0 16px;margin-bottom:8px;}
+
+/* time picker drums */
+.tdrum{display:flex;flex-direction:column;align-items:center;background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden;}
+.tdrum-val{font-size:28px;font-weight:700;color:var(--amber);min-width:56px;text-align:center;padding:12px 0;}
+.tdrum-btns{display:flex;width:100%;}
+.tdrum-btn{flex:1;background:rgba(255,255,255,.05);border:none;border-top:1px solid var(--border);padding:10px;font-size:18px;color:var(--muted);cursor:pointer;font-family:'DM Sans',sans-serif;}
+.tdrum-btn:hover{background:rgba(255,255,255,.1);color:var(--cream);}
+.tdrum-btn:first-child{border-right:1px solid var(--border);}
+.hrs-chip{background:var(--amber-dim);border:1px solid rgba(245,158,11,.3);border-radius:20px;padding:6px 18px;font-size:14px;font-weight:600;color:var(--amber);display:inline-block;}
+
+/* copy btn */
+.copy-btn{flex:1;background:rgba(16,185,129,.12);color:var(--green);border:1px solid rgba(16,185,129,.3);border-radius:10px;padding:13px 16px;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:600;cursor:pointer;}
+.copy-btn:hover{background:rgba(16,185,129,.22);}
+
+/* TIPS */
+.tip-date-strip{display:flex;gap:6px;overflow-x:auto;padding-bottom:0;scrollbar-width:none;}
+.tip-date-strip::-webkit-scrollbar{display:none;}
+.tip-emp-row{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--border);cursor:pointer;}
+.tip-emp-row:last-child{border-bottom:none;}
+.tcheck{width:24px;height:24px;border-radius:50%;border:2px solid var(--border);display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .2s;}
+.tcheck.on{background:var(--amber);border-color:var(--amber);}
+.tc-badge{font-size:10px;padding:2px 7px;border-radius:10px;font-weight:600;}
+.tc-auto{background:rgba(16,185,129,.15);color:var(--green);}
+.tc-added{background:rgba(245,158,11,.15);color:var(--amber);}
+
+/* SUMMARY */
+.summary-emp-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:18px;margin:0 16px 10px;}
+.sg{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px;}
+.ss{background:var(--card2);border-radius:10px;padding:12px;}
+.total-card{background:linear-gradient(135deg,#0e0c02,#060e09);border:1px solid rgba(245,158,11,.25);border-radius:var(--radius);padding:22px;margin:0 16px 12px;}
+
+/* SETTINGS */
+.set-sec{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);margin:0 16px 12px;overflow:hidden;}
+.set-item{padding:16px 18px;display:flex;align-items:center;gap:14px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .15s;}
+.set-item:last-child{border-bottom:none;}
+.set-item:hover{background:rgba(255,255,255,.03);}
+
+/* NOTES */
+.notebook{background:#fef9f0;border-radius:16px;overflow:hidden;}
+.nb-hdr{background:#f5e8c8;padding:14px 16px 10px;border-bottom:2px solid #d4a853;}
+.nb-lbl{font-size:12px;color:#8b6914;font-weight:600;text-transform:uppercase;letter-spacing:1px;}
+.nb-body{padding:8px 16px 16px 50px;position:relative;}
+.nb-margin{position:absolute;left:44px;top:0;bottom:0;width:1px;background:rgba(255,100,100,.4);}
+.note-line{display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid rgba(180,150,80,.2);min-height:36px;}
+.note-circle{width:18px;height:18px;border-radius:50%;border:2px solid #d4a853;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.note-circle.done{background:#10B981;border-color:#10B981;}
+.note-ti{flex:1;background:transparent;border:none;outline:none;font-family:'DM Sans',sans-serif;font-size:14px;color:#2d1f08;padding:0;}
+.note-done{text-decoration:line-through;color:#9ca3af;}
+.note-del{background:none;border:none;cursor:pointer;color:#d4a853;font-size:16px;opacity:.5;padding:0 4px;}
+.note-del:hover{opacity:1;}
+.nb-add-btn{background:rgba(212,168,83,.2);border:1px dashed #d4a853;border-radius:8px;padding:8px 12px;color:#8b6914;font-family:'DM Sans',sans-serif;font-size:13px;cursor:pointer;margin-top:10px;width:100%;}
+.date-strip-nb{display:flex;gap:8px;overflow-x:auto;padding:8px 0 4px;scrollbar-width:none;}
+.date-strip-nb::-webkit-scrollbar{display:none;}
+.nb-dpill{flex-shrink:0;padding:6px 14px;border-radius:20px;font-size:12px;cursor:pointer;background:rgba(212,168,83,.1);color:#8b6914;border:1px solid rgba(212,168,83,.3);white-space:nowrap;}
+.nb-dpill.sel{background:#d4a853;color:#2d1f08;font-weight:600;}
+
+.hist-entry{background:var(--card2);border-radius:10px;padding:12px;margin-bottom:8px;}
+
+::-webkit-scrollbar{width:4px;}
+::-webkit-scrollbar-thumb{background:rgba(255,255,255,.1);border-radius:4px;}
+
+#toast{position:fixed;bottom:100px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--card);border:1px solid var(--amber);color:var(--cream);border-radius:12px;padding:12px 20px;font-size:13px;z-index:200;opacity:0;transition:opacity .3s,transform .3s;pointer-events:none;white-space:nowrap;}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+@keyframes shake{0%,100%{transform:translateX(0);}20%{transform:translateX(-10px);}40%{transform:translateX(10px);}60%{transform:translateX(-6px);}80%{transform:translateX(6px)};}
+@media(min-width:600px){.card,.summary-emp-card,.total-card,.set-sec,.shift-card,.add-member-card{max-width:560px;margin-left:auto;margin-right:auto;}}
+</style>
+</head>
+<body style="background:#0F1117;">
+
+<!-- LOGIN -->
+<div id="login-screen">
+  <div class="ldecor" style="width:300px;height:300px;background:rgba(245,158,11,.08);top:-50px;right:-80px;"></div>
+  <div class="ldecor" style="width:200px;height:200px;background:rgba(139,92,246,.06);bottom:80px;left:-60px;"></div>
+  <div class="login-logo">My Ayvana</div>
+  <div class="login-sub">Restaurant Management</div>
+  <div class="login-card">
+    <label class="lbl">Username</label>
+    <input class="linput" id="lu" type="text" placeholder="Enter username" autocomplete="off">
+    <label class="lbl">Password</label>
+    <input class="linput" id="lp" type="password" placeholder="Enter password">
+    <button class="lbtn" onclick="doLogin()">Sign In</button>
+    <div class="lerr" id="lerr"></div>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app">
+
+  <!-- HOME -->
+  <div class="screen active" id="screen-home">
+    <div style="display:flex;justify-content:center;padding:20px 20px 0;">
+      <div class="banner-ph"><span>My Ayvana</span><small>Restaurant</small></div>
+    </div>
+    <div style="padding:16px 20px 8px;display:flex;align-items:center;justify-content:space-between;">
+      <div style="font-size:14px;color:var(--muted);" id="home-date"></div>
+      <button style="background:var(--amber-dim);color:var(--amber);border:1px solid rgba(245,158,11,.3);border-radius:8px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;" onclick="openNotesModal()">📓 Notes</button>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding:0 16px;margin-bottom:12px;">
+      <div class="sc"><div class="sn" id="st">0</div><div class="sl">Staff</div></div>
+      <div class="sc"><div class="sn" id="ss">0</div><div class="sl">Servers</div></div>
+      <div class="sc"><div class="sn" id="sb">0</div><div class="sl">Busboys</div></div>
+    </div>
+    <div class="pc">
+      <div style="font-size:11px;color:rgba(245,158,11,.7);letter-spacing:2px;text-transform:uppercase;">Total Weekly Payroll</div>
+      <div style="font-family:'Playfair Display',serif;font-size:38px;color:var(--amber);margin:4px 0;" id="hp">$0.00</div>
+      <div style="font-size:13px;color:var(--muted);" id="hh">0 hours scheduled this week</div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:0 16px;margin-bottom:16px;">
+      <div class="qa-tile" style="background:rgba(245,158,11,.12);border-color:rgba(245,158,11,.2)" onclick="switchTab('employees')"><div style="font-size:26px;margin-bottom:8px;">👤</div><div style="font-size:14px;font-weight:600;">Team</div><div style="font-size:11px;color:var(--muted);margin-top:3px;">Manage staff</div></div>
+      <div class="qa-tile" style="background:rgba(59,130,246,.1);border-color:rgba(59,130,246,.2)" onclick="switchTab('schedule')"><div style="font-size:26px;margin-bottom:8px;">📅</div><div style="font-size:14px;font-weight:600;">Schedule</div><div style="font-size:11px;color:var(--muted);margin-top:3px;">Weekly shifts</div></div>
+      <div class="qa-tile" style="background:rgba(16,185,129,.1);border-color:rgba(16,185,129,.2)" onclick="switchTab('tips')"><div style="font-size:26px;margin-bottom:8px;">💰</div><div style="font-size:14px;font-weight:600;">Tips</div><div style="font-size:11px;color:var(--muted);margin-top:3px;">Distribute tips</div></div>
+      <div class="qa-tile" style="background:rgba(139,92,246,.1);border-color:rgba(139,92,246,.2)" onclick="switchTab('summary')"><div style="font-size:26px;margin-bottom:8px;">📊</div><div style="font-size:14px;font-weight:600;">Summary</div><div style="font-size:11px;color:var(--muted);margin-top:3px;">Payroll report</div></div>
+    </div>
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:0 16px;margin-bottom:10px;">
+      <button class="wn-btn" onclick="changeWeek(-1)">‹</button>
+      <div style="font-size:13px;font-weight:600;" id="hwl"></div>
+      <button class="wn-btn" onclick="changeWeek(1)">›</button>
+    </div>
+    <div id="hel" style="padding-bottom:20px;"></div>
+  </div>
+
+  <!-- EMPLOYEES -->
+  <div class="screen" id="screen-employees">
+    <div class="ph" style="display:flex;align-items:center;justify-content:space-between;">
+      <div><div class="pt">Team</div><div class="ps">Manage your staff</div></div>
+      <button class="abtn" onclick="openEmpModal()">+ Add</button>
+    </div>
+    <div class="card" style="padding:14px 18px;margin-bottom:12px;">
+      <div style="display:flex;gap:20px;flex-wrap:wrap;">
+        <div class="fg" style="flex:1;min-width:140px;margin:0;"><div class="fl">Server Hourly Rate ($)</div><input class="fi" id="rate-server" type="number" value="15" min="0" step="0.5" onchange="saveRates()"></div>
+        <div class="fg" style="flex:1;min-width:140px;margin:0;"><div class="fl">Busboy Hourly Rate ($)</div><input class="fi" id="rate-busboy" type="number" value="12" min="0" step="0.5" onchange="saveRates()"></div>
+      </div>
+    </div>
+    <div id="emp-list"></div>
+    <div id="emp-empty" style="text-align:center;padding:40px 20px;color:var(--muted);display:none;"><div style="font-size:40px;margin-bottom:12px;">👥</div><div>No employees yet</div><div style="font-size:13px;margin-top:6px;">Tap "+ Add" to get started</div></div>
+  </div>
+
+  <!-- SCHEDULE -->
+  <div class="screen" id="screen-schedule">
+    <div class="ph" style="display:flex;align-items:center;justify-content:space-between;">
+      <div><div class="pt">Schedule</div><div class="ps" id="sw-lbl"></div></div>
+      <div style="display:flex;gap:8px;"><button class="wn-btn" onclick="changeWeek(-1)">‹</button><button class="wn-btn" onclick="changeWeek(1)">›</button></div>
+    </div>
+    <div class="day-pill-row" id="sched-pills"></div>
+    <div id="sched-content"></div>
+    <div style="display:flex;gap:10px;padding:0 16px 20px;margin-top:8px;">
+      <button class="copy-btn" id="copy-btn" onclick="copySchedule()">📋 Copy Schedule as Text</button>
+    </div>
+  </div>
+
+  <!-- TIPS -->
+  <div class="screen" id="screen-tips">
+    <div class="ph"><div class="pt">Tips</div><div class="ps">Distribute daily tips</div></div>
+
+    <!-- UNIFIED DATE + TIME card -->
+    <div class="card" style="margin-bottom:10px;padding:16px;">
+      <!-- selected date display -->
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+        <div>
+          <div style="font-size:11px;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:3px;">Date</div>
+          <div style="font-size:17px;font-weight:700;color:var(--cream);" id="tip-date-display">—</div>
+        </div>
+        <div style="text-align:right;">
+          <div style="font-size:11px;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:3px;">Shift</div>
+          <div style="font-size:17px;font-weight:700;color:var(--amber);" id="tip-time-display">11:00 – 23:00</div>
+        </div>
+      </div>
+      <!-- day pills -->
+      <div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:14px;scrollbar-width:none;" id="tip-date-strip"></div>
+      <!-- time range row -->
+      <div style="display:flex;align-items:center;gap:10px;padding-top:2px;">
+        <div style="flex:1;">
+          <div class="fl">From</div>
+          <input class="fi" id="tip-from" type="time" value="11:00" onchange="onTipTimeChange()">
+        </div>
+        <div style="color:var(--muted);font-size:18px;margin-top:16px;">–</div>
+        <div style="flex:1;">
+          <div class="fl">To</div>
+          <input class="fi" id="tip-to" type="time" value="23:00" onchange="onTipTimeChange()">
+        </div>
+      </div>
+    </div>
+
+    <!-- Tips amount + split -->
+    <div class="card" style="margin-bottom:10px;">
+      <div class="fg"><div class="fl">Total Tips Collected ($)</div><input class="fi" id="tip-total" type="number" value="0" min="0" step="1" oninput="calcTips()"></div>
+      <div style="display:flex;gap:16px;flex-wrap:wrap;">
+        <div class="fg" style="flex:1;min-width:120px;margin:0;"><div class="fl">Server Tip %</div><input class="fi" id="tip-pct-s" type="number" value="70" min="0" max="100" oninput="calcTips()"></div>
+        <div class="fg" style="flex:1;min-width:120px;margin:0;"><div class="fl">Busboy Tip %</div><input class="fi" id="tip-pct-b" type="number" value="30" min="0" max="100" oninput="calcTips()"></div>
+      </div>
+    </div>
+
+    <!-- Receivers -->
+    <div class="card" style="margin-bottom:10px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+        <div style="font-size:11px;color:var(--muted);letter-spacing:1px;">TIP RECEIVERS</div>
+        <div style="font-size:11px;color:var(--amber);" id="tip-auto-note"></div>
+      </div>
+      <div id="tip-emp-list"><div style="color:var(--muted);font-size:13px;">Add employees first</div></div>
+    </div>
+
+    <!-- Breakdown -->
+    <div style="margin:0 16px 12px;background:linear-gradient(135deg,#060f0b,#060d10);border:1px solid rgba(16,185,129,.18);border-radius:var(--radius);padding:18px;">
+      <div style="font-size:11px;color:rgba(16,185,129,.7);letter-spacing:2px;text-transform:uppercase;margin-bottom:8px;">Breakdown</div>
+      <div id="tip-summary"></div>
+    </div>
+    <div style="padding:0 16px 20px;"><button class="abtn" style="width:100%;padding:14px;" onclick="saveTips()">Save Tip Entry</button></div>
+  </div>
+
+  <!-- SUMMARY -->
+  <div class="screen" id="screen-summary">
+    <div class="ph" style="display:flex;align-items:center;justify-content:space-between;">
+      <div><div class="pt">Summary</div><div class="ps">Payroll & earnings report</div></div>
+      <button class="gbtn" onclick="openHistory()">📋 History</button>
+    </div>
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:0 16px;margin-bottom:12px;">
+      <button class="wn-btn" onclick="changeWeek(-1)">‹</button>
+      <div style="font-size:13px;font-weight:600;" id="sum-wl"></div>
+      <button class="wn-btn" onclick="changeWeek(1)">›</button>
+    </div>
+    <div class="total-card">
+      <div style="font-size:11px;color:rgba(245,158,11,.7);letter-spacing:2px;text-transform:uppercase;">Total Payroll (Wages + Tips)</div>
+      <div style="font-family:'Playfair Display',serif;font-size:34px;color:var(--amber);margin:4px 0;" id="tc">$0.00</div>
+      <div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:6px;">
+        <span style="font-size:13px;color:var(--muted);">Wages: <strong style="color:var(--cream);" id="tw">$0</strong></span>
+        <span style="font-size:13px;color:var(--muted);">Tips: <strong style="color:var(--green);" id="tt">$0</strong></span>
+        <span style="font-size:13px;color:var(--muted);">Hours: <strong style="color:var(--cream);" id="th">0</strong></span>
+      </div>
+    </div>
+    <div id="sum-list" style="padding-bottom:20px;"></div>
+  </div>
+
+  <!-- SETTINGS -->
+  <div class="screen" id="screen-settings">
+    <div class="ph"><div class="pt">Settings</div><div class="ps">App preferences</div></div>
+    <div style="font-size:11px;color:var(--muted);padding:0 20px 8px;letter-spacing:1.5px;text-transform:uppercase;">Account</div>
+    <div class="set-sec">
+      <div class="set-item" onclick="openCredModal()"><div style="font-size:20px;width:36px;text-align:center;">🔑</div><div style="flex:1;"><div style="font-size:14px;font-weight:500;">Change Credentials</div><div style="font-size:12px;color:var(--muted);margin-top:2px;" id="cred-disp">Username: Ali</div></div><div style="color:var(--muted);">›</div></div>
+    </div>
+    <div style="font-size:11px;color:var(--muted);padding:8px 20px 8px;letter-spacing:1.5px;text-transform:uppercase;">Data</div>
+    <div class="set-sec">
+      <div class="set-item" onclick="switchTab('employees')"><div style="font-size:20px;width:36px;text-align:center;">💵</div><div style="flex:1;"><div style="font-size:14px;font-weight:500;">Hourly Rates</div><div style="font-size:12px;color:var(--muted);margin-top:2px;" id="rates-disp">Server $15 / Busboy $12</div></div><div style="color:var(--muted);">›</div></div>
+      <div class="set-item" onclick="clearData()"><div style="font-size:20px;width:36px;text-align:center;">🗑️</div><div style="flex:1;"><div style="font-size:14px;font-weight:500;color:var(--red);">Clear All Data</div><div style="font-size:12px;color:var(--muted);margin-top:2px;">Reset app to defaults</div></div></div>
+    </div>
+    <div style="padding:20px 16px;"><button class="dbtn" style="width:100%;padding:14px;font-size:15px;" onclick="doLogout()">Sign Out</button></div>
+    <div style="text-align:center;color:var(--muted);font-size:12px;padding-bottom:20px;">My Ayvana v2.0</div>
+  </div>
+
+  <!-- TAB BAR -->
+  <div class="tab-bar">
+    <div class="tab-item active" onclick="switchTab('home')" id="tab-home"><div class="tab-icon">🏠</div><div class="tab-lbl">Home</div></div>
+    <div class="tab-item" onclick="switchTab('employees')" id="tab-employees"><div class="tab-icon">👥</div><div class="tab-lbl">Team</div></div>
+    <div class="tab-item" onclick="switchTab('schedule')" id="tab-schedule"><div class="tab-icon">📅</div><div class="tab-lbl">Schedule</div></div>
+    <div class="tab-item" onclick="switchTab('tips')" id="tab-tips"><div class="tab-icon">💰</div><div class="tab-lbl">Tips</div></div>
+    <div class="tab-item" onclick="switchTab('summary')" id="tab-summary"><div class="tab-icon">📊</div><div class="tab-lbl">Summary</div></div>
+    <div class="tab-item" onclick="switchTab('settings')" id="tab-settings"><div class="tab-icon">⚙️</div><div class="tab-lbl">Settings</div></div>
+  </div>
+</div>
+
+<!-- MODALS -->
+<!-- Emp modal -->
+<div class="mo" id="emp-modal">
+  <div class="ms">
+    <div class="mt" id="emp-modal-title">Add Employee</div>
+    <div class="fg"><div class="fl">Name</div><input class="fi" id="emp-name" placeholder="Employee name"></div>
+    <div class="fg"><div class="fl">Role</div><select class="fi" id="emp-role" style="cursor:pointer;"><option value="Server">Server</option><option value="Busboy">Busboy</option></select></div>
+    <div class="ma"><button class="gbtn" onclick="closeM('emp-modal')">Cancel</button><button class="abtn" onclick="saveEmployee()">Save</button></div>
+  </div>
+</div>
+
+<!-- Shift modal -->
+<div class="mo" id="shift-modal">
+  <div class="ms">
+    <div class="mt">Set Shift</div>
+    <div style="font-size:16px;font-weight:600;margin-bottom:20px;" id="shift-emp-disp"></div>
+    <div style="font-size:11px;color:var(--muted);letter-spacing:1px;margin-bottom:12px;">START TIME</div>
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px;">
+      <div style="flex:1;"><div style="font-size:11px;color:var(--muted);text-align:center;margin-bottom:6px;">Hour</div>
+        <div class="tdrum"><div class="tdrum-val" id="sh">11</div><div class="tdrum-btns"><button class="tdrum-btn" onclick="adj('sh',-1,0,23)">−</button><button class="tdrum-btn" onclick="adj('sh',1,0,23)">+</button></div></div></div>
+      <div style="font-size:28px;font-weight:700;color:var(--muted);padding-top:14px;">:</div>
+      <div style="flex:1;"><div style="font-size:11px;color:var(--muted);text-align:center;margin-bottom:6px;">Min</div>
+        <div class="tdrum"><div class="tdrum-val" id="sm">00</div><div class="tdrum-btns"><button class="tdrum-btn" onclick="adjStep('sm',-15,0,45)">−</button><button class="tdrum-btn" onclick="adjStep('sm',15,0,45)">+</button></div></div></div>
+    </div>
+    <div style="font-size:11px;color:var(--muted);letter-spacing:1px;margin-bottom:12px;">END TIME</div>
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px;">
+      <div style="flex:1;"><div style="font-size:11px;color:var(--muted);text-align:center;margin-bottom:6px;">Hour</div>
+        <div class="tdrum"><div class="tdrum-val" id="eh">23</div><div class="tdrum-btns"><button class="tdrum-btn" onclick="adj('eh',-1,0,23)">−</button><button class="tdrum-btn" onclick="adj('eh',1,0,23)">+</button></div></div></div>
+      <div style="font-size:28px;font-weight:700;color:var(--muted);padding-top:14px;">:</div>
+      <div style="flex:1;"><div style="font-size:11px;color:var(--muted);text-align:center;margin-bottom:6px;">Min</div>
+        <div class="tdrum"><div class="tdrum-val" id="em">00</div><div class="tdrum-btns"><button class="tdrum-btn" onclick="adjStep('em',-15,0,45)">−</button><button class="tdrum-btn" onclick="adjStep('em',15,0,45)">+</button></div></div></div>
+    </div>
+    <div style="text-align:center;margin-bottom:16px;" id="shift-preview"></div>
+    <div class="ma"><button class="gbtn" onclick="closeM('shift-modal')">Cancel</button><button class="abtn" onclick="saveShift()">Save Shift</button></div>
+  </div>
+</div>
+
+<!-- Notes modal -->
+<div class="mo" id="notes-modal">
+  <div class="ms">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+      <div class="mt" style="margin:0;">📓 Notes & Reminders</div>
+      <button class="gbtn" style="padding:6px 12px;" onclick="closeM('notes-modal')">Done</button>
+    </div>
+    <div class="date-strip-nb" id="nb-strip"></div>
+    <div style="margin:12px 0;">
+      <div class="notebook">
+        <div class="nb-hdr"><div class="nb-lbl" id="nb-date-lbl"></div></div>
+        <div class="nb-body" id="nb-lines"><div class="nb-margin"></div></div>
+        <div style="padding:4px 16px 14px 50px;"><button class="nb-add-btn" onclick="addNote()">+ Add note</button></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- History modal -->
+<div class="mo" id="hist-modal">
+  <div class="ms">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+      <div class="mt" style="margin:0;">📋 Tip History</div>
+      <button class="gbtn" style="padding:6px 12px;" onclick="closeM('hist-modal')">Close</button>
+    </div>
+    <div id="hist-list"></div>
+  </div>
+</div>
+
+<!-- Cred modal -->
+<div class="mo" id="cred-modal">
+  <div class="ms">
+    <div class="mt">Change Credentials</div>
+    <div class="fg"><div class="fl">New Username</div><input class="fi" id="new-u" placeholder="Username"></div>
+    <div class="fg"><div class="fl">New Password</div><input class="fi" id="new-p" type="password" placeholder="Password"></div>
+    <div class="fg"><div class="fl">Confirm Password</div><input class="fi" id="conf-p" type="password" placeholder="Confirm"></div>
+    <div class="ma"><button class="gbtn" onclick="closeM('cred-modal')">Cancel</button><button class="abtn" onclick="saveCredentials()">Save</button></div>
+  </div>
+</div>
+
+<!-- Custom confirm modal (replaces blocked window.confirm) -->
+<div class="mo" id="confirm-modal" style="z-index:99;">
+  <div class="ms" style="max-height:auto;padding:28px 24px;">
+    <div style="font-size:17px;font-weight:600;color:var(--cream);margin-bottom:8px;" id="confirm-title">Are you sure?</div>
+    <div style="font-size:14px;color:var(--muted);margin-bottom:24px;" id="confirm-msg"></div>
+    <div style="display:flex;gap:10px;">
+      <button class="gbtn" style="flex:1;padding:13px;" onclick="confirmCancel()">Cancel</button>
+      <button id="confirm-ok-btn" style="flex:1;padding:13px;border:none;border-radius:10px;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:600;cursor:pointer;" onclick="confirmOK()">Confirm</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ======== STATE ========
+let S={auth:{username:'Ali',password:'Ayvanagoodfood',loggedIn:false},employees:[],schedules:{},tips:[],notes:{},rates:{server:15,busboy:12},tipPcts:{server:70,busboy:30},weekOffset:0};
+let empId=1,editEmpId=null,shiftEmpId=null,shiftDayKey=null,schedDay=0,tipDate=null,tipChecked={},notesDate=null;
+const DAYS=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'],DKS=['mon','tue','wed','thu','fri','sat','sun'];
+
+function save(){try{localStorage.setItem('av3',JSON.stringify(S));}catch(e){}}
+function load(){try{const r=localStorage.getItem('av3');if(r){const p=JSON.parse(r);S={...S,...p};}}catch(e){}}
+
+// ======== UTILS ========
+function p2(n){return String(n).padStart(2,'0');}
+function t2m(t){const[h,m]=t.split(':').map(Number);return h*60+m;}
+function calcH(s,e){let d=t2m(e)-t2m(s);if(d<0)d+=1440;return d/60;}
+function wkStart(off=0){const d=new Date(),dy=d.getDay(),diff=d.getDate()-dy+(dy===0?-6:1);d.setDate(diff+off*7);d.setHours(0,0,0,0);return d;}
+function wkKey(off){return wkStart(off).toISOString().split('T')[0];}
+function wkLbl(off){const s=wkStart(off),e=new Date(s);e.setDate(e.getDate()+6);const f=d=>d.toLocaleDateString('en-US',{month:'short',day:'numeric'});return`${f(s)} – ${f(e)}, ${s.getFullYear()}`;}
+function dayDate(off,i){const s=wkStart(off),d=new Date(s);d.setDate(d.getDate()+i);return d;}
+function closeM(id){document.getElementById(id).classList.remove('open');}
+function toast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2500);}
+
+// ======== CUSTOM CONFIRM (replaces blocked window.confirm) ========
+let _confirmCb=null;
+function showConfirm(msg,okLabel,okColor,cb){
+  document.getElementById('confirm-msg').textContent=msg;
+  const btn=document.getElementById('confirm-ok-btn');
+  btn.textContent=okLabel||'Confirm';
+  btn.style.background=okColor||'#EF4444';
+  btn.style.color='#fff';
+  _confirmCb=cb;
+  document.getElementById('confirm-modal').classList.add('open');
+}
+function confirmOK(){document.getElementById('confirm-modal').classList.remove('open');if(_confirmCb)_confirmCb();_confirmCb=null;}
+function confirmCancel(){document.getElementById('confirm-modal').classList.remove('open');_confirmCb=null;}
+
+// ======== AUTH ========
+function doLogin(){
+  const u=document.getElementById('lu').value.trim(),p=document.getElementById('lp').value;
+  if(u===S.auth.username&&p===S.auth.password){S.auth.loggedIn=true;save();document.getElementById('login-screen').style.display='none';document.getElementById('app').classList.add('visible');initApp();}
+  else{document.getElementById('lerr').textContent='Incorrect username or password.';const c=document.querySelector('.login-card');c.style.animation='none';c.offsetHeight;c.style.animation='shake .4s ease';}
+}
+function doLogout(){
+  showConfirm('Sign out of My Ayvana?','Sign Out','#EF4444',()=>{
+    S.auth.loggedIn=false;save();
+    document.getElementById('app').classList.remove('visible');
+    document.getElementById('login-screen').style.display='flex';
+    document.getElementById('lp').value='';document.getElementById('lerr').textContent='';
+  });
+}
+
+// ======== TABS ========
+function switchTab(name){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  document.querySelectorAll('.tab-item').forEach(t=>t.classList.remove('active'));
+  document.getElementById('screen-'+name).classList.add('active');
+  document.getElementById('tab-'+name).classList.add('active');
+  ({home:renderHome,employees:renderEmployees,schedule:renderSchedule,tips:renderTips,summary:renderSummary,settings:renderSettings})[name]?.();
+}
+function changeWeek(d){S.weekOffset+=d;save();renderHome();renderSchedule();renderSummary();}
+
+// ======== EMPLOYEES ========
+function openEmpModal(id){editEmpId=id||null;document.getElementById('emp-modal-title').textContent=id?'Edit Employee':'Add Employee';if(id){const e=S.employees.find(x=>x.id===id);document.getElementById('emp-name').value=e.name;document.getElementById('emp-role').value=e.role;}else{document.getElementById('emp-name').value='';document.getElementById('emp-role').value='Server';}document.getElementById('emp-modal').classList.add('open');setTimeout(()=>document.getElementById('emp-name').focus(),100);}
+function saveEmployee(){const name=document.getElementById('emp-name').value.trim(),role=document.getElementById('emp-role').value;if(!name){toast('Please enter a name');return;}if(editEmpId){const e=S.employees.find(x=>x.id===editEmpId);if(e){e.name=name;e.role=role;}}else S.employees.push({id:'e'+(empId++),name,role});save();closeM('emp-modal');renderEmployees();renderHome();toast(editEmpId?'Updated':'Employee added');}
+function removeEmp(id){const e=S.employees.find(x=>x.id===id);showConfirm(`Remove ${e?e.name:'this employee'}?`,'Remove','#EF4444',()=>{S.employees=S.employees.filter(x=>x.id!==id);save();renderEmployees();renderHome();toast('Employee removed');});}
+function saveRates(){S.rates.server=parseFloat(document.getElementById('rate-server').value)||0;S.rates.busboy=parseFloat(document.getElementById('rate-busboy').value)||0;save();renderSettings();}
+function renderEmployees(){
+  document.getElementById('rate-server').value=S.rates.server;
+  document.getElementById('rate-busboy').value=S.rates.busboy;
+  const list=document.getElementById('emp-list'),empty=document.getElementById('emp-empty');
+  if(!S.employees.length){list.innerHTML='';empty.style.display='block';return;}
+  empty.style.display='none';
+  list.innerHTML=S.employees.map(e=>`<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin:0 16px 10px;">
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px;">
+      <div class="av">${e.name[0].toUpperCase()}</div>
+      <div style="flex:1;"><div style="font-weight:600;font-size:15px;">${e.name}</div><span class="badge b${e.role==='Server'?'s':'b'}">${e.role}</span></div>
+      <div style="display:flex;gap:8px;"><button class="ibt" onclick="openEmpModal('${e.id}')">✏️</button><button class="ibt" onclick="removeEmp('${e.id}')">🗑️</button></div>
+    </div>
+    <div class="div"></div>
+    <div style="display:flex;gap:16px;flex-wrap:wrap;">
+      <div><div class="fl">Rate</div><div style="font-size:15px;font-weight:600;color:var(--amber);">$${e.role==='Server'?S.rates.server:S.rates.busboy}/hr</div></div>
+      <div><div class="fl">This Week</div><div style="font-size:15px;font-weight:600;">${empWeekH(e.id,S.weekOffset)}h</div></div>
+      <div><div class="fl">Wages</div><div style="font-size:15px;font-weight:600;color:var(--green);">$${empWages(e.id,S.weekOffset).toFixed(2)}</div></div>
+    </div>
+  </div>`).join('');
+}
+
+// ======== SCHEDULE DATA ========
+function getShift(eid,off,dk){return S.schedules[wkKey(off)]?.[eid]?.[dk]||null;}
+function setShift(eid,off,dk,st,en){const wk=wkKey(off);if(!S.schedules[wk])S.schedules[wk]={};if(!S.schedules[wk][eid])S.schedules[wk][eid]={};S.schedules[wk][eid][dk]={start:st,end:en,hours:calcH(st,en)};save();}
+function delShift(eid,off,dk){const wk=wkKey(off);if(S.schedules[wk]?.[eid]?.[dk])delete S.schedules[wk][eid][dk];save();}
+function empWeekH(eid,off){const b=S.schedules[wkKey(off)]?.[eid]||{};return DKS.reduce((s,dk)=>s+(b[dk]?.hours||0),0).toFixed(1);}
+function empWages(eid,off){const e=S.employees.find(x=>x.id===eid);if(!e)return 0;return parseFloat(empWeekH(eid,off))*(e.role==='Server'?S.rates.server:S.rates.busboy);}
+function empTips(eid,off){const s=wkStart(off),en=new Date(s);en.setDate(en.getDate()+6);let tot=0;S.tips.forEach(t=>{const d=new Date(t.date+'T12:00:00');if(d>=s&&d<=en&&t.receivers.includes(eid)){const emp=S.employees.find(e=>e.id===eid);if(!emp)return;const rr=t.receivers.filter(r=>{const e=S.employees.find(x=>x.id===r);return e&&e.role===emp.role;});if(!rr.length)return;const pct=emp.role==='Server'?t.serverPct:t.busboyPct;tot+=(t.total*pct/100)/rr.length;}});return tot;}
+
+// find workers whose shift overlaps a time range on a given date
+function workersInRange(dateStr,from,to){
+  const tgt=new Date(dateStr+'T12:00:00'),dy=tgt.getDay(),di=dy===0?6:dy-1,dk=DKS[di];
+  for(let off=-12;off<=12;off++){const s=wkStart(off),e=new Date(s);e.setDate(e.getDate()+6);if(tgt>=s&&tgt<=e){const wk=wkKey(off),b=S.schedules[wk]||{};const fm=t2m(from),tm=t2m(to);return S.employees.filter(emp=>{const sh=b[emp.id]?.[dk];return sh&&t2m(sh.start)<tm&&t2m(sh.end)>fm;});}}
+  return[];
+}
+
+// ======== SCHEDULE UI ========
+function renderSchedule(){
+  document.getElementById('sw-lbl').textContent=wkLbl(S.weekOffset);
+  // day pills
+  document.getElementById('sched-pills').innerHTML=DAYS.map((day,i)=>{
+    const d=dayDate(S.weekOffset,i),dk=DKS[i],wk=wkKey(S.weekOffset),cnt=S.employees.filter(e=>S.schedules[wk]?.[e.id]?.[dk]).length;
+    return`<div class="dpill${schedDay===i?' active':''}" onclick="selDay(${i})">
+      <div class="dpill-n">${day}</div><div class="dpill-d">${d.getDate()}</div>
+      <div class="dpill-c">${cnt?cnt+' on':' '}</div>
+    </div>`;
+  }).join('');
+  renderSchedContent();
+}
+function selDay(i){schedDay=i;renderSchedule();}
+function renderSchedContent(){
+  const off=S.weekOffset,dk=DKS[schedDay],wk=wkKey(off);
+  const dd=dayDate(off,schedDay),dateStr=dd.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'});
+  const content=document.getElementById('sched-content');
+  if(!S.employees.length){content.innerHTML='<div style="text-align:center;padding:40px 20px;color:var(--muted)"><div style="font-size:36px;margin-bottom:10px">👥</div><div>Add team members first</div></div>';return;}
+  const onShift=S.employees.filter(e=>S.schedules[wk]?.[e.id]?.[dk]);
+  const offShift=S.employees.filter(e=>!S.schedules[wk]?.[e.id]?.[dk]);
+  let html=`<div style="padding:0 16px 10px;font-size:14px;font-weight:600;color:var(--cream);">${dateStr}</div>`;
+  if(onShift.length){
+    html+=`<div class="sec-title">ON SHIFT TODAY (${onShift.length})</div>`;
+    html+=onShift.map(emp=>{const sh=S.schedules[wk][emp.id][dk];return`<div class="shift-card">
+      <div class="av">${emp.name[0]}</div>
+      <div style="flex:1;"><div style="font-weight:600;font-size:14px;">${emp.name}</div>
+        <div style="font-size:13px;color:var(--amber);font-weight:600;margin-top:2px;">${sh.start} – ${sh.end}</div>
+        <div style="font-size:11px;color:var(--muted);">${sh.hours.toFixed(1)} hours</div></div>
+      <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end;">
+        <button style="background:rgba(255,255,255,.07);border:none;border-radius:8px;padding:5px 12px;font-size:12px;color:var(--cream);cursor:pointer;font-family:'DM Sans',sans-serif;" onclick="openShiftModal('${emp.id}','${dk}')">✏️ Edit</button>
+        <button style="background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.25);border-radius:8px;padding:5px 12px;font-size:12px;color:var(--red);cursor:pointer;font-family:'DM Sans',sans-serif;" onclick="delShift('${emp.id}',${off},'${dk}');renderSchedule();renderHome();toast('Removed');">Remove</button>
+      </div>
+    </div>`;}).join('');
+  }
+  if(offShift.length){
+    html+=`<div class="sec-title" style="margin-top:${onShift.length?12:0}px;">ADD TO SHIFT</div>`;
+    html+=offShift.map(emp=>`<div class="add-member-card" onclick="openShiftModal('${emp.id}','${dk}')">
+      <div class="av" style="background:rgba(255,255,255,.04);border-color:var(--border);color:var(--muted);">${emp.name[0]}</div>
+      <div style="flex:1;"><div style="font-weight:600;font-size:14px;">${emp.name}</div><span class="badge b${emp.role==='Server'?'s':'b'}">${emp.role}</span></div>
+      <div style="color:var(--amber);font-size:22px;font-weight:300;">+</div>
+    </div>`).join('');
+  }
+  content.innerHTML=html;
+}
+
+// shift time modal
+function openShiftModal(eid,dk){
+  shiftEmpId=eid;shiftDayKey=dk;
+  const emp=S.employees.find(e=>e.id===eid),dayN=DAYS[DKS.indexOf(dk)],dd=dayDate(S.weekOffset,DKS.indexOf(dk));
+  document.getElementById('shift-emp-disp').textContent=emp.name+' · '+dayN+' '+dd.toLocaleDateString('en-US',{month:'short',day:'numeric'});
+  const ex=S.schedules[wkKey(S.weekOffset)]?.[eid]?.[dk],st=ex?ex.start:'11:00',en=ex?ex.end:'23:00';
+  document.getElementById('sh').textContent=p2(parseInt(st.split(':')[0]));
+  document.getElementById('sm').textContent=p2(parseInt(st.split(':')[1]));
+  document.getElementById('eh').textContent=p2(parseInt(en.split(':')[0]));
+  document.getElementById('em').textContent=p2(parseInt(en.split(':')[1]));
+  updPreview();document.getElementById('shift-modal').classList.add('open');
+}
+function adj(id,d,mn,mx){const el=document.getElementById(id);let v=parseInt(el.textContent)+d;if(v<mn)v=mx;if(v>mx)v=mn;el.textContent=p2(v);updPreview();}
+function adjStep(id,step,mn,mx){const el=document.getElementById(id);let v=parseInt(el.textContent)+step;if(v<mn)v=mx;if(v>mx)v=mn;el.textContent=p2(v);updPreview();}
+function updPreview(){
+  const s=`${document.getElementById('sh').textContent}:${document.getElementById('sm').textContent}`;
+  const e=`${document.getElementById('eh').textContent}:${document.getElementById('em').textContent}`;
+  document.getElementById('shift-preview').innerHTML=`<span class="hrs-chip">${s} → ${e} &nbsp;·&nbsp; ${calcH(s,e).toFixed(1)} hours</span>`;
+}
+function saveShift(){
+  const s=`${document.getElementById('sh').textContent}:${document.getElementById('sm').textContent}`;
+  const e=`${document.getElementById('eh').textContent}:${document.getElementById('em').textContent}`;
+  setShift(shiftEmpId,S.weekOffset,shiftDayKey,s,e);
+  closeM('shift-modal');renderSchedule();renderHome();toast('Shift saved ✓');
+}
+
+// ======== COPY SCHEDULE ========
+function copySchedule(){
+  const off=S.weekOffset,lines=[];
+  lines.push('📅 WEEKLY SCHEDULE');
+  lines.push(wkLbl(off));
+  lines.push('─'.repeat(30));
+  DAYS.forEach((day,i)=>{
+    const dk=DKS[i],dd=dayDate(off,i),wk=wkKey(off);
+    const dateStr=dd.toLocaleDateString('en-US',{weekday:'long',month:'short',day:'numeric'});
+    const workers=S.employees.filter(e=>S.schedules[wk]?.[e.id]?.[dk]);
+    lines.push('');lines.push(dateStr);
+    if(!workers.length){lines.push('  No shifts scheduled');}
+    else{
+      workers.forEach(emp=>{const sh=S.schedules[wk][emp.id][dk];lines.push(`  • ${emp.name}  ${sh.start}–${sh.end}  (${sh.hours.toFixed(1)}h)`);});
+      const tot=workers.reduce((s,emp)=>s+(S.schedules[wk][emp.id][dk]?.hours||0),0);
+      lines.push(`  Total: ${tot.toFixed(1)} hrs`);
+    }
+  });
+  const totH=S.employees.reduce((s,e)=>s+parseFloat(empWeekH(e.id,off)),0);
+  lines.push('');lines.push('─'.repeat(30));lines.push(`Total weekly hours: ${totH.toFixed(1)} hrs`);
+  const text=lines.join('\n');
+  const btn=document.getElementById('copy-btn');
+  function ok(){btn.textContent='✅ Copied!';btn.style.background='rgba(16,185,129,.25)';setTimeout(()=>{btn.textContent='📋 Copy Schedule as Text';btn.style.background='';},2500);}
+  if(navigator.clipboard&&window.isSecureContext){navigator.clipboard.writeText(text).then(ok).catch(()=>fb(text));}
+  else fb(text);
+  function fb(txt){const ta=document.createElement('textarea');ta.value=txt;ta.style.cssText='position:fixed;top:0;left:0;opacity:0;width:1px;height:1px;';document.body.appendChild(ta);ta.focus();ta.select();try{document.execCommand('copy');ok();}catch(e){toast('Could not copy — please copy manually');}document.body.removeChild(ta);}
+}
+
+// ======== TIPS ========
+function fmtTipDate(k){
+  if(!k)return'—';
+  const d=new Date(k+'T12:00:00');
+  return d.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'});
+}
+function updateTipHeader(){
+  const from=document.getElementById('tip-from').value||'11:00';
+  const to=document.getElementById('tip-to').value||'23:00';
+  document.getElementById('tip-date-display').textContent=fmtTipDate(tipDate);
+  document.getElementById('tip-time-display').textContent=from+' – '+to;
+}
+function buildTipDateStrip(){
+  const today=new Date(),days=[];
+  for(let i=-3;i<=6;i++){const d=new Date(today);d.setDate(d.getDate()+i);days.push(d);}
+  if(!tipDate)tipDate=today.toISOString().split('T')[0];
+  document.getElementById('tip-date-strip').innerHTML=days.map(d=>{
+    const k=d.toISOString().split('T')[0];
+    const active=k===tipDate;
+    return`<div style="flex-shrink:0;display:flex;flex-direction:column;align-items:center;padding:9px 13px;border-radius:12px;cursor:pointer;border:1px solid ${active?'var(--amber)':'var(--border)'};background:${active?'var(--amber)':'var(--card2)'};transition:all .18s;min-width:52px;" onclick="selTipDate('${k}')">
+      <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:${active?'#000':'var(--muted)'};">${d.toLocaleDateString('en-US',{weekday:'short'})}</div>
+      <div style="font-size:17px;font-weight:700;color:${active?'#000':'var(--cream)'};">${d.getDate()}</div>
+    </div>`;
+  }).join('');
+  setTimeout(()=>{const s=document.querySelector('#tip-date-strip [style*="var(--amber)"]');if(s)s.scrollIntoView({inline:'center',block:'nearest',behavior:'smooth'});},50);
+}
+function selTipDate(k){tipDate=k;buildTipDateStrip();updateTipHeader();autoLoadTipWorkers();}
+function onTipTimeChange(){updateTipHeader();autoLoadTipWorkers();}
+function autoLoadTipWorkers(){
+  if(!tipDate)return;
+  const from=document.getElementById('tip-from').value||'11:00';
+  const to=document.getElementById('tip-to').value||'23:00';
+  const auto=workersInRange(tipDate,from,to);
+  const autoIds=new Set(auto.map(e=>e.id));
+  S.employees.forEach(emp=>{
+    if(autoIds.has(emp.id)) tipChecked[emp.id]='auto';
+    else if(tipChecked[emp.id]==='auto'&&!autoIds.has(emp.id)) tipChecked[emp.id]=false;
+    else if(!tipChecked[emp.id]) tipChecked[emp.id]=false;
+  });
+  // note
+  const note=document.getElementById('tip-auto-note');
+  if(note) note.textContent=auto.length?`${auto.length} auto-loaded from shift`:'No shift workers found – add manually';
+  renderTipsList();calcTips();
+}
+function renderTips(){
+  buildTipDateStrip();updateTipHeader();
+  document.getElementById('tip-pct-s').value=S.tipPcts.server;
+  document.getElementById('tip-pct-b').value=S.tipPcts.busboy;
+  document.getElementById('tip-total').value=0;
+  S.employees.forEach(e=>{if(!tipChecked[e.id])tipChecked[e.id]=false;});
+  autoLoadTipWorkers();
+}
+function renderTipsList(){
+  const list=document.getElementById('tip-emp-list');
+  if(!S.employees.length){list.innerHTML='<div style="color:var(--muted);font-size:13px;">Add employees first</div>';return;}
+  list.innerHTML=S.employees.map(e=>{
+    const on=tipChecked[e.id]==='auto'||tipChecked[e.id]===true;
+    const isAuto=tipChecked[e.id]==='auto';
+    return`<div class="tip-emp-row" onclick="toggleTip('${e.id}')">
+      <div class="tcheck${on?' on':''}">
+        ${on?'<span style="color:#000;font-size:11px;font-weight:800;">✓</span>':''}
+      </div>
+      <div class="av" style="width:32px;height:32px;font-size:13px;">${e.name[0]}</div>
+      <div style="flex:1;">
+        <div style="font-size:14px;font-weight:500;">${e.name}</div>
+        <div style="display:flex;gap:6px;margin-top:3px;">
+          <span class="badge b${e.role==='Server'?'s':'b'}">${e.role}</span>
+          ${on&&isAuto?'<span class="tc-badge tc-auto">on shift</span>':''}
+          ${on&&!isAuto?'<span class="tc-badge tc-added">added</span>':''}
+        </div>
+      </div>
+      <div style="text-align:right;">
+        <div style="font-size:15px;font-weight:700;color:var(--amber);" id="ta-${e.id}">$0.00</div>
+        <div style="font-size:11px;color:var(--muted);" id="tp-${e.id}">—</div>
+      </div>
+    </div>`;
+  }).join('');
+  calcTips();
+}
+function toggleTip(id){
+  tipChecked[id]=tipChecked[id]==='auto'?false:(tipChecked[id]===true?false:true);
+  renderTipsList();
+}
+function calcTips(){
+  const total=parseFloat(document.getElementById('tip-total').value)||0;
+  const sp=parseFloat(document.getElementById('tip-pct-s').value)||0;
+  const bp=parseFloat(document.getElementById('tip-pct-b').value)||0;
+  S.tipPcts.server=sp;S.tipPcts.busboy=bp;
+  const sel=S.employees.filter(e=>tipChecked[e.id]==='auto'||tipChecked[e.id]===true);
+  const srvs=sel.filter(e=>e.role==='Server'),bbs=sel.filter(e=>e.role==='Busboy');
+  let asp=0,abp=0;
+  if(srvs.length&&bbs.length){asp=sp;abp=bp;}
+  else if(srvs.length){asp=100;}
+  else if(bbs.length){abp=100;}
+  const spool=total*asp/100,bpool=total*abp/100;
+  let summLines='';
+  S.employees.forEach(e=>{
+    const on=tipChecked[e.id]==='auto'||tipChecked[e.id]===true;
+    let amt=0,pstr='—';
+    if(on){
+      if(e.role==='Server'&&srvs.length){amt=spool/srvs.length;pstr=srvs.length===1?'100%':`${asp}%÷${srvs.length}`;}
+      if(e.role==='Busboy'&&bbs.length){amt=bpool/bbs.length;pstr=bbs.length===1?'100%':`${abp}%÷${bbs.length}`;}
+    }
+    const ae=document.getElementById('ta-'+e.id),pe=document.getElementById('tp-'+e.id);
+    if(ae)ae.textContent='$'+amt.toFixed(2);if(pe)pe.textContent=pstr;
+    if(on)summLines+=`<div style="display:flex;justify-content:space-between;font-size:13px;padding:5px 0;border-bottom:1px solid rgba(255,255,255,.05);"><span style="color:var(--muted);">${e.name} (${e.role})</span><strong style="color:var(--green);">$${amt.toFixed(2)}</strong></div>`;
+  });
+  const sumEl=document.getElementById('tip-summary');
+  if(!total||!sel.length){sumEl.innerHTML='<div style="color:var(--muted);font-size:13px;">Select employees and enter tips</div>';return;}
+  sumEl.innerHTML=summLines+`<div style="display:flex;justify-content:space-between;font-size:15px;font-weight:700;margin-top:10px;"><span>Total Distributed</span><span style="color:var(--green);">$${(spool+bpool).toFixed(2)}</span></div>`;
+}
+function saveTips(){
+  const total=parseFloat(document.getElementById('tip-total').value)||0;
+  if(total<=0){toast('Enter a tip amount');return;}
+  if(!tipDate){toast('Select a date');return;}
+  const receivers=S.employees.filter(e=>tipChecked[e.id]==='auto'||tipChecked[e.id]===true).map(e=>e.id);
+  if(!receivers.length){toast('Select at least one employee');return;}
+  const sp=parseFloat(document.getElementById('tip-pct-s').value)||0;
+  const bp=parseFloat(document.getElementById('tip-pct-b').value)||0;
+  S.tips.push({id:'t'+Date.now(),date:tipDate,total,receivers,serverPct:sp,busboyPct:bp});
+  save();toast('Tip entry saved ✓');document.getElementById('tip-total').value=0;calcTips();renderSummary();
+}
+
+// ======== SUMMARY ========
+function renderSummary(){
+  const off=S.weekOffset;document.getElementById('sum-wl').textContent=wkLbl(off);
+  let tw=0,tt=0,th=0;
+  const list=document.getElementById('sum-list');
+  if(!S.employees.length){list.innerHTML='<div style="text-align:center;padding:40px 20px;color:var(--muted)"><div style="font-size:40px;margin-bottom:12px">📊</div><div>Add employees to see summary</div></div>';['tc','tw','tt','th'].forEach(id=>document.getElementById(id).textContent=id==='th'?'0':'$0');return;}
+  list.innerHTML=S.employees.map(e=>{
+    const h=parseFloat(empWeekH(e.id,off)),w=empWages(e.id,off),t=empTips(e.id,off),c=w+t;
+    tw+=w;tt+=t;th+=h;
+    return`<div class="summary-emp-card">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">
+        <div class="av">${e.name[0]}</div>
+        <div><div style="font-weight:600;font-size:15px;">${e.name}</div><span class="badge b${e.role==='Server'?'s':'b'}">${e.role}</span></div>
+        <div style="flex:1;"></div>
+        <div style="text-align:right;"><div style="font-family:'Playfair Display',serif;font-size:20px;color:var(--amber);">$${c.toFixed(2)}</div><div style="font-size:11px;color:var(--muted);">Total</div></div>
+      </div>
+      <div class="sg">
+        <div class="ss"><div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;">Hours</div><div style="font-size:18px;font-weight:700;color:var(--cream);margin-top:2px;">${h.toFixed(1)}h</div></div>
+        <div class="ss"><div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;">Wages</div><div style="font-size:18px;font-weight:700;color:var(--amber);margin-top:2px;">$${w.toFixed(2)}</div></div>
+        <div class="ss"><div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;">Tips</div><div style="font-size:18px;font-weight:700;color:var(--green);margin-top:2px;">$${t.toFixed(2)}</div></div>
+        <div class="ss"><div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;">Rate</div><div style="font-size:18px;font-weight:700;color:var(--muted);margin-top:2px;">$${e.role==='Server'?S.rates.server:S.rates.busboy}/h</div></div>
+      </div>
+    </div>`;
+  }).join('');
+  document.getElementById('tc').textContent='$'+(tw+tt).toFixed(2);
+  document.getElementById('tw').textContent='$'+tw.toFixed(2);
+  document.getElementById('tt').textContent='$'+tt.toFixed(2);
+  document.getElementById('th').textContent=th.toFixed(1)+'h';
+}
+
+// ======== HOME ========
+function renderHome(){
+  const d=new Date();document.getElementById('home-date').textContent=d.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'});
+  document.getElementById('hwl').textContent=wkLbl(S.weekOffset);
+  document.getElementById('st').textContent=S.employees.length;
+  document.getElementById('ss').textContent=S.employees.filter(e=>e.role==='Server').length;
+  document.getElementById('sb').textContent=S.employees.filter(e=>e.role==='Busboy').length;
+  let w=0,h=0;S.employees.forEach(e=>{w+=empWages(e.id,S.weekOffset);h+=parseFloat(empWeekH(e.id,S.weekOffset));});
+  document.getElementById('hp').textContent='$'+w.toFixed(2);
+  document.getElementById('hh').textContent=h.toFixed(1)+' hours scheduled this week';
+  const el=document.getElementById('hel');
+  if(!S.employees.length){el.innerHTML='<div style="text-align:center;padding:20px;color:var(--muted);font-size:13px;">No employees added yet</div>';return;}
+  el.innerHTML=S.employees.map(e=>`<div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin:0 16px 8px;display:flex;align-items:center;gap:12px;">
+    <div class="av">${e.name[0]}</div>
+    <div><div style="font-weight:600;font-size:14px;">${e.name}</div><div style="font-size:11px;color:var(--muted);">${e.role}</div></div>
+    <div style="margin-left:auto;text-align:right;"><div style="font-size:13px;font-weight:600;color:var(--amber);">${empWeekH(e.id,S.weekOffset)}h</div><div style="font-size:11px;color:var(--muted);">$${empWages(e.id,S.weekOffset).toFixed(2)}</div></div>
+  </div>`).join('');
+}
+
+// ======== NOTES ========
+function openNotesModal(){notesDate=new Date().toISOString().split('T')[0];renderNbStrip();renderNb();document.getElementById('notes-modal').classList.add('open');}
+function renderNbStrip(){
+  const today=new Date(),days=[];for(let i=-3;i<=6;i++){const d=new Date(today);d.setDate(d.getDate()+i);days.push(d);}
+  document.getElementById('nb-strip').innerHTML=days.map(d=>{const k=d.toISOString().split('T')[0],l=d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});return`<div class="nb-dpill${k===notesDate?' sel':''}" onclick="selNbDate('${k}')">${l}</div>`;}).join('');
+  setTimeout(()=>{const s=document.querySelector('.nb-dpill.sel');if(s)s.scrollIntoView({inline:'center',block:'nearest',behavior:'smooth'});},50);
+}
+function selNbDate(k){notesDate=k;renderNbStrip();renderNb();}
+function renderNb(){
+  const d=new Date(notesDate+'T12:00:00');document.getElementById('nb-date-lbl').textContent=d.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'});
+  const notes=S.notes[notesDate]||[];
+  document.getElementById('nb-lines').innerHTML='<div class="nb-margin"></div>'+notes.map((n,i)=>`<div class="note-line">
+    <div class="note-circle${n.done?' done':''}" onclick="toggleNote('${notesDate}',${i})">${n.done?'<span style="color:#fff;font-size:10px;font-weight:800;">✓</span>':''}</div>
+    <input class="note-ti${n.done?' note-done':''}" value="${n.text.replace(/"/g,'&quot;')}" onblur="updNote('${notesDate}',${i},this.value)" onkeydown="if(event.key==='Enter')this.blur();">
+    <button class="note-del" onclick="delNote('${notesDate}',${i})">×</button>
+  </div>`).join('');
+}
+function addNote(){if(!S.notes[notesDate])S.notes[notesDate]=[];S.notes[notesDate].push({id:Date.now(),text:'',done:false});save();renderNb();const ins=document.querySelectorAll('.note-ti');if(ins.length)ins[ins.length-1].focus();}
+function toggleNote(k,i){S.notes[k][i].done=!S.notes[k][i].done;save();renderNb();}
+function updNote(k,i,txt){if(!S.notes[k])return;S.notes[k][i].text=txt;if(!txt.trim()){S.notes[k].splice(i,1);renderNb();}save();}
+function delNote(k,i){S.notes[k].splice(i,1);save();renderNb();}
+
+// ======== HISTORY ========
+function openHistory(){
+  const list=document.getElementById('hist-list');
+  if(!S.tips.length){list.innerHTML='<div style="color:var(--muted);text-align:center;padding:30px;">No tip history yet</div>';}
+  else{const sorted=[...S.tips].sort((a,b)=>new Date(b.date)-new Date(a.date));
+    list.innerHTML=sorted.map(t=>{
+      const d=new Date(t.date+'T12:00:00'),ds=d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric',year:'numeric'});
+      const recs=t.receivers.map(id=>S.employees.find(e=>e.id===id)?.name||'?').join(', ');
+      return`<div class="hist-entry"><div style="font-size:11px;color:var(--amber);font-weight:600;margin-bottom:6px;">${ds}</div><div style="font-size:13px;color:var(--muted);margin-bottom:2px;">Employees: ${recs}</div><div style="font-size:13px;color:var(--muted);">Split: Server ${t.serverPct}% / Busboy ${t.busboyPct}%</div><div style="font-size:15px;font-weight:700;color:var(--cream);margin-top:6px;">Total: $${t.total.toFixed(2)}</div></div>`;
+    }).join('');}
+  document.getElementById('hist-modal').classList.add('open');
+}
+
+// ======== SETTINGS ========
+function renderSettings(){document.getElementById('cred-disp').textContent='Username: '+S.auth.username;document.getElementById('rates-disp').textContent=`Server $${S.rates.server}/hr · Busboy $${S.rates.busboy}/hr`;}
+function openCredModal(){document.getElementById('new-u').value=S.auth.username;document.getElementById('new-p').value='';document.getElementById('conf-p').value='';document.getElementById('cred-modal').classList.add('open');}
+function saveCredentials(){const u=document.getElementById('new-u').value.trim(),p=document.getElementById('new-p').value,c=document.getElementById('conf-p').value;if(!u){toast('Enter a username');return;}if(p&&p!==c){toast('Passwords do not match');return;}S.auth.username=u;if(p)S.auth.password=p;save();closeM('cred-modal');renderSettings();toast('Credentials updated');}
+function clearData(){showConfirm('Clear ALL data? This cannot be undone.','Clear All','#EF4444',()=>{S.employees=[];S.schedules={};S.tips=[];S.notes={};S.weekOffset=0;tipChecked={};save();renderHome();renderEmployees();renderSchedule();renderTips();renderSummary();toast('Data cleared');});}
+
+// ======== INIT ========
+function initApp(){
+  S.employees.forEach(e=>{const n=parseInt(e.id.replace('e',''));if(n>=empId)empId=n+1;});
+  const today=new Date();schedDay=today.getDay()===0?6:today.getDay()-1;
+  tipDate=today.toISOString().split('T')[0];
+  renderHome();renderEmployees();renderSchedule();renderTips();renderSummary();renderSettings();
+}
+window.onload=()=>{
+  load();
+  if(S.auth.loggedIn){document.getElementById('login-screen').style.display='none';document.getElementById('app').classList.add('visible');initApp();}
+  document.getElementById('lp').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin();});
+  document.getElementById('lu').addEventListener('keydown',e=>{if(e.key==='Enter')document.getElementById('lp').focus();});
+  document.querySelectorAll('.mo').forEach(o=>o.addEventListener('click',e=>{if(e.target===o)o.classList.remove('open');}));
+};
+</script>
+</body>
+</html>
