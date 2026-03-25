@@ -419,46 +419,73 @@ body{height:100%;background:#0F1117!important;color:#EEE9E3;font-family:'DM Sans
 
 <script>
 (function(){
-// ═══════════════════════════════════════════════
-// STORAGE KEY — obfuscated so it's not obvious
-// ═══════════════════════════════════════════════
-const _k=(function(){const a=[97,118,51,100,97,116,97];return a.map(c=>String.fromCharCode(c)).join('');})();
+'use strict';
 
-// ═══════════════════════════════════════════════
-// STATE
-// ═══════════════════════════════════════════════
-let S={
-  auth:{username:'Ali',password:'Ayvanagoodfood',loggedIn:false},
-  employees:[],schedules:{},tips:[],notes:{},
-  rates:{server:15,busboy:12},tipPcts:{server:70,busboy:30},weekOffset:0
-};
-let _eid=1,_editId=null,_shiftEid=null,_shiftDk=null,_schedDay=0,_tipDate=null,_tipChecked={},_notesDate=null,_confirmCb=null;
+// ═══════════════════════════════════════════════════════════════
+// MULTI-USER PERSISTENT STORAGE
+// ---------------------------------------------------------------
+// Three separate localStorage namespaces:
+//
+//  av_accounts   → {usernameLower: {username, password}}
+//                  All registered users. Never wiped on logout.
+//
+//  av_session    → {username, loggedIn:true}
+//                  Who is currently signed in.
+//
+//  av_data_<u>   → Per-user dataset (employees, schedules, tips…)
+//                  One isolated store per username. Never shared.
+// ═══════════════════════════════════════════════════════════════
+
+function _hash(s){let h=5381;for(let i=0;i<s.length;i++){h=((h<<5)+h)^s.charCodeAt(i);h>>>=0;}return h.toString(36);}
+function _enc(obj){const p=JSON.stringify(obj);return btoa(unescape(encodeURIComponent(p)))+'.'+_hash(p);}
+function _dec(raw){
+  try{
+    const d=raw.lastIndexOf('.');if(d<0)return null;
+    const p=decodeURIComponent(escape(atob(raw.slice(0,d))));
+    if(_hash(p)!==raw.slice(d+1))return null;
+    return JSON.parse(p);
+  }catch(e){return null;}
+}
+
+// ── ACCOUNTS ────────────────────────────────────────────────────
+const AK='av_accounts';
+function loadAccts(){try{const r=localStorage.getItem(AK);return r?(_dec(r)||{}):{}}catch(e){return{};}}
+function saveAccts(a){try{localStorage.setItem(AK,_enc(a));}catch(e){}}
+function getAcct(u){return loadAccts()[u.toLowerCase()]||null;}
+function upsertAcct(u,p){const a=loadAccts();a[u.toLowerCase()]={username:u,password:p};saveAccts(a);}
+
+// ── SESSION ──────────────────────────────────────────────────────
+const SK='av_session';
+function loadSess(){try{const r=localStorage.getItem(SK);return r?_dec(r):null;}catch(e){return null;}}
+function saveSess(u){try{localStorage.setItem(SK,_enc({username:u,loggedIn:true}));}catch(e){}}
+function clearSess(){try{localStorage.removeItem(SK);}catch(e){}}
+
+// ── PER-USER DATA ────────────────────────────────────────────────
+function udk(u){return'av_data_'+u.toLowerCase();}
+function loadUD(u){try{const r=localStorage.getItem(udk(u));return r?_dec(r):null;}catch(e){return null;}}
+function saveUD(u,d){try{localStorage.setItem(udk(u),_enc(d));}catch(e){}}
+function defData(){return{employees:[],schedules:{},tips:[],notes:{},rates:{server:15,busboy:12},tipPcts:{server:70,busboy:30},weekOffset:0};}
+
+// ── RUNTIME STATE ────────────────────────────────────────────────
+let S=defData();
+let _cu=null; // current username
+
+function save(){if(_cu)saveUD(_cu,S);}
+function loadForUser(u){
+  _cu=u;
+  const stored=loadUD(u);
+  S=stored?Object.assign(defData(),stored):defData();
+  _eid=1;
+  S.employees.forEach(e=>{const n=parseInt((e.id||'').replace('e',''));if(!isNaN(n)&&n>=_eid)_eid=n+1;});
+}
+
+// Ensure default account exists on very first visit
+function bootstrapAcct(){if(!getAcct('Ali'))upsertAcct('Ali','Ayvanagoodfood');}
+
+// ─────────────────────────────────────────────────────────────────
+let _eid=1,_editId=null,_shiftEid=null,_shiftDk=null,_schedDay=0,
+    _tipDate=null,_tipChecked={},_notesDate=null,_confirmCb=null;
 const DAYS=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'],DKS=['mon','tue','wed','thu','fri','sat','sun'];
-
-// ═══════════════════════════════════════════════
-// PERSIST — all data saved to localStorage on every change
-// ═══════════════════════════════════════════════
-function save(){
-  try{
-    // store a lightweight hash alongside to detect tampering (not cryptographic, just integrity)
-    const payload=JSON.stringify(S);
-    const chk=payload.length^(payload.charCodeAt(0)||0);
-    localStorage.setItem(_k,btoa(unescape(encodeURIComponent(payload))));
-    localStorage.setItem(_k+'_c',String(chk));
-  }catch(e){}
-}
-function load(){
-  try{
-    const raw=localStorage.getItem(_k);
-    if(!raw)return;
-    const payload=decodeURIComponent(escape(atob(raw)));
-    const chk=payload.length^(payload.charCodeAt(0)||0);
-    const stored=parseInt(localStorage.getItem(_k+'_c')||'0');
-    if(chk!==stored)return; // integrity mismatch, ignore
-    const p=JSON.parse(payload);
-    S={...S,...p};
-  }catch(e){}
-}
 
 // ═══════════════════════════════════════════════
 // UTILS
@@ -479,11 +506,8 @@ function toast(msg){const t=document.getElementById('toast');t.textContent=msg;t
 window.showConfirm=function(msg,okLabel,okColor,cb){
   document.getElementById('confirm-msg').textContent=msg;
   const btn=document.getElementById('confirm-ok-btn');
-  btn.textContent=okLabel||'Confirm';
-  btn.style.background=okColor||'#EF4444';
-  btn.style.color='#fff';
-  _confirmCb=cb;
-  document.getElementById('confirm-modal').classList.add('open');
+  btn.textContent=okLabel||'Confirm';btn.style.background=okColor||'#EF4444';btn.style.color='#fff';
+  _confirmCb=cb;document.getElementById('confirm-modal').classList.add('open');
 };
 window.confirmOK=function(){closeM('confirm-modal');if(_confirmCb)_confirmCb();_confirmCb=null;};
 window.confirmCancel=function(){closeM('confirm-modal');_confirmCb=null;};
@@ -493,8 +517,11 @@ window.confirmCancel=function(){closeM('confirm-modal');_confirmCb=null;};
 // ═══════════════════════════════════════════════
 window.doLogin=function(){
   const u=document.getElementById('lu').value.trim(),p=document.getElementById('lp').value;
-  if(u===S.auth.username&&p===S.auth.password){
-    S.auth.loggedIn=true;save();
+  if(!u||!p){document.getElementById('lerr').textContent='Enter username and password.';return;}
+  const acct=getAcct(u);
+  if(acct&&acct.password===p){
+    loadForUser(acct.username); // use stored casing
+    saveSess(acct.username);
     document.getElementById('login-screen').style.display='none';
     document.getElementById('app').classList.add('visible');
     initApp();
@@ -505,7 +532,8 @@ window.doLogin=function(){
 };
 window.doLogout=function(){
   showConfirm('Sign out of My Ayvana?','Sign Out','#EF4444',()=>{
-    S.auth.loggedIn=false;save();
+    save(); // make sure last data is written
+    clearSess();_cu=null;S=defData();_tipChecked={};
     document.getElementById('app').classList.remove('visible');
     document.getElementById('login-screen').style.display='flex';
     document.getElementById('lp').value='';document.getElementById('lerr').textContent='';
@@ -553,7 +581,6 @@ window.saveRates=function(){
   S.rates.busboy=parseFloat(document.getElementById('rate-busboy').value)||0;
   save();renderSettings();
 };
-
 function renderEmployees(){
   document.getElementById('rate-server').value=S.rates.server;
   document.getElementById('rate-busboy').value=S.rates.busboy;
@@ -565,10 +592,7 @@ function renderEmployees(){
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px;">
         <div class="av">${e.name[0].toUpperCase()}</div>
         <div style="flex:1;"><div style="font-weight:600;font-size:15px;">${e.name}</div><span class="badge b${e.role==='Server'?'s':'b'}">${e.role}</span></div>
-        <div style="display:flex;gap:8px;">
-          <button class="ibt" onclick="openEmpModal('${e.id}')">✏️</button>
-          <button class="ibt" onclick="removeEmp('${e.id}')">🗑️</button>
-        </div>
+        <div style="display:flex;gap:8px;"><button class="ibt" onclick="openEmpModal('${e.id}')">✏️</button><button class="ibt" onclick="removeEmp('${e.id}')">🗑️</button></div>
       </div>
       <div class="div"></div>
       <div style="display:flex;gap:16px;flex-wrap:wrap;">
@@ -592,7 +616,7 @@ function empTips(eid,off){
     const d=new Date(t.date+'T12:00:00');
     if(d>=s&&d<=en&&t.receivers.includes(eid)){
       const emp=S.employees.find(e=>e.id===eid);if(!emp)return;
-      const rr=t.receivers.filter(r=>{const e=S.employees.find(x=>x.id===r);return e&&e.role===emp.role;});
+      const rr=t.receivers.filter(r=>{const e2=S.employees.find(x=>x.id===r);return e2&&e2.role===emp.role;});
       if(!rr.length)return;
       const pct=emp.role==='Server'?t.serverPct:t.busboyPct;
       tot+=(t.total*pct/100)/rr.length;
@@ -601,7 +625,7 @@ function empTips(eid,off){
   return tot;
 }
 
-// workers whose shift overlaps a time range on a given date
+// Workers whose shift overlaps the given time range on a specific date
 function workersInRange(dateStr,from,to){
   const tgt=new Date(dateStr+'T12:00:00'),dy=tgt.getDay(),di=dy===0?6:dy-1,dk=DKS[di];
   for(let off=-12;off<=12;off++){
@@ -630,7 +654,6 @@ function renderSchedule(){
   renderSchedContent();
 }
 window.selDay=function(i){_schedDay=i;renderSchedule();};
-
 function renderSchedContent(){
   const off=S.weekOffset,dk=DKS[_schedDay],wk=wkKey(off);
   const dd=dayDate(off,_schedDay),dateStr=dd.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'});
@@ -664,11 +687,9 @@ function renderSchedContent(){
   }
   content.innerHTML=html;
 }
-
 window.openShiftModal=function(eid,dk){
   _shiftEid=eid;_shiftDk=dk;
-  const emp=S.employees.find(e=>e.id===eid),di=DKS.indexOf(dk);
-  const dd=dayDate(S.weekOffset,di);
+  const emp=S.employees.find(e=>e.id===eid),di=DKS.indexOf(dk),dd=dayDate(S.weekOffset,di);
   document.getElementById('shift-emp-disp').textContent=emp.name+' · '+DAYS[di]+' '+dd.toLocaleDateString('en-US',{month:'short',day:'numeric'});
   const ex=S.schedules[wkKey(S.weekOffset)]?.[eid]?.[dk],st=ex?ex.start:'11:00',en=ex?ex.end:'23:00';
   document.getElementById('sh').textContent=p2(parseInt(st.split(':')[0]));
@@ -702,7 +723,7 @@ window.copySchedule=function(){
     const dateStr=dd.toLocaleDateString('en-US',{weekday:'long',month:'short',day:'numeric'});
     const workers=S.employees.filter(e=>S.schedules[wk]?.[e.id]?.[dk]);
     lines.push('');lines.push(dateStr);
-    if(!workers.length){lines.push('  No shifts scheduled');}
+    if(!workers.length)lines.push('  No shifts scheduled');
     else{
       workers.forEach(emp=>{const sh=S.schedules[wk][emp.id][dk];lines.push(`  • ${emp.name}  ${sh.start}–${sh.end}  (${sh.hours.toFixed(1)}h)`);});
       lines.push(`  Total: ${workers.reduce((s,emp)=>s+(S.schedules[wk][emp.id][dk]?.hours||0),0).toFixed(1)} hrs`);
@@ -718,23 +739,36 @@ window.copySchedule=function(){
 };
 
 // ═══════════════════════════════════════════════
-// TIPS — full rework
+// TIPS — auto-select workers, persist selection
 // ═══════════════════════════════════════════════
+
+// _tipChecked: { empId: 'auto' | true | false }
+// 'auto'  = selected because they're on shift for the time range
+// true    = manually added by user
+// false   = not selected (or manually removed)
+//
+// On date/time change: re-run auto-detection.
+//   - Workers now in range but previously 'false' (manually removed): KEEP false (respect user)
+//   - Workers now in range and previously 'auto' or undefined: set 'auto'
+//   - Workers NOT in range and previously 'auto': set false
+//   - Workers NOT in range with true: keep true (user manually added)
+
 function fmtTipDate(k){
   if(!k)return'—';
   return new Date(k+'T12:00:00').toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'});
 }
 function updateTipHeader(){
-  const from=document.getElementById('tip-from').value||'11:00';
-  const to=document.getElementById('tip-to').value||'23:00';
-  document.getElementById('tip-date-display').textContent=fmtTipDate(_tipDate);
-  document.getElementById('tip-time-display').textContent=from+' – '+to;
+  const from=document.getElementById('tip-from')?.value||'11:00';
+  const to=document.getElementById('tip-to')?.value||'23:00';
+  const dd=document.getElementById('tip-date-display');if(dd)dd.textContent=fmtTipDate(_tipDate);
+  const td=document.getElementById('tip-time-display');if(td)td.textContent=from+' – '+to;
 }
 function buildTipDateStrip(){
   const today=new Date(),days=[];
   for(let i=-3;i<=6;i++){const d=new Date(today);d.setDate(d.getDate()+i);days.push(d);}
   if(!_tipDate)_tipDate=today.toISOString().split('T')[0];
-  document.getElementById('tip-date-strip').innerHTML=days.map(d=>{
+  const strip=document.getElementById('tip-date-strip');if(!strip)return;
+  strip.innerHTML=days.map(d=>{
     const k=d.toISOString().split('T')[0],active=k===_tipDate;
     return`<div style="flex-shrink:0;display:flex;flex-direction:column;align-items:center;padding:9px 13px;border-radius:12px;cursor:pointer;border:1px solid ${active?'var(--amber)':'var(--border)'};background:${active?'var(--amber)':'var(--card2)'};min-width:52px;" onclick="selTipDate('${k}')">
       <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:${active?'#000':'var(--muted)'};">${d.toLocaleDateString('en-US',{weekday:'short'})}</div>
@@ -743,50 +777,52 @@ function buildTipDateStrip(){
   }).join('');
 }
 window.selTipDate=function(k){
+  // Switching date: reset auto selections, keep manual ones
+  S.employees.forEach(e=>{if(_tipChecked[e.id]==='auto')_tipChecked[e.id]=false;});
   _tipDate=k;
-  // reset tipChecked so auto-load runs fresh for new date
-  _tipChecked={};
   buildTipDateStrip();updateTipHeader();autoLoadTipWorkers();renderSavedTips();
 };
 window.onTipTimeChange=function(){updateTipHeader();autoLoadTipWorkers();};
 
 function autoLoadTipWorkers(){
-  if(!_tipDate)return;
-  const from=document.getElementById('tip-from').value||'11:00';
-  const to=document.getElementById('tip-to').value||'23:00';
-  const auto=workersInRange(_tipDate,from,to);
-  const autoIds=new Set(auto.map(e=>e.id));
-  // For each employee: if in autoIds, mark 'auto' (selected); if was 'auto' and now out, uncheck;
-  // if manually set (true/false), preserve
+  if(!_tipDate||!S.employees.length)return;
+  const from=document.getElementById('tip-from')?.value||'11:00';
+  const to=document.getElementById('tip-to')?.value||'23:00';
+  const autoWorkers=workersInRange(_tipDate,from,to);
+  const autoIds=new Set(autoWorkers.map(e=>e.id));
+
   S.employees.forEach(emp=>{
     const cur=_tipChecked[emp.id];
     if(autoIds.has(emp.id)){
-      // only auto-select if not manually deselected
-      if(cur===undefined||cur==='auto') _tipChecked[emp.id]='auto';
-      // if user manually set to false, keep false
-    } else {
-      if(cur==='auto') _tipChecked[emp.id]=false;
-      else if(cur===undefined) _tipChecked[emp.id]=false;
+      // On shift: auto-select UNLESS user explicitly removed them (cur===false set AFTER being auto)
+      // We track this by: if cur is undefined or 'auto', set 'auto'. If cur===false, keep false.
+      if(cur===undefined||cur==='auto')_tipChecked[emp.id]='auto';
+      // if cur===true (manually added), keep true
+    }else{
+      // Not on shift: if was auto-selected, remove. If manually added (true) or false, keep.
+      if(cur==='auto')_tipChecked[emp.id]=false;
+      else if(cur===undefined)_tipChecked[emp.id]=false;
     }
   });
+
   const note=document.getElementById('tip-auto-note');
-  if(note) note.textContent=auto.length?`${auto.length} auto-loaded from shift`:'No scheduled workers found';
+  if(note)note.textContent=autoWorkers.length?`${autoWorkers.length} auto-loaded from shift`:(S.employees.length?'No scheduled workers for this time':'');
   renderTipsList();calcTips();
 }
 
 function renderTips(){
   buildTipDateStrip();updateTipHeader();
-  document.getElementById('tip-pct-s').value=S.tipPcts.server;
-  document.getElementById('tip-pct-b').value=S.tipPcts.busboy;
-  document.getElementById('tip-total').value=0;
+  const ps=document.getElementById('tip-pct-s'),pb=document.getElementById('tip-pct-b');
+  if(ps)ps.value=S.tipPcts.server;if(pb)pb.value=S.tipPcts.busboy;
+  const tt=document.getElementById('tip-total');if(tt)tt.value=0;
+  // Init any new employees to false
   S.employees.forEach(e=>{if(_tipChecked[e.id]===undefined)_tipChecked[e.id]=false;});
   autoLoadTipWorkers();
   renderSavedTips();
 }
-
 function renderTipsList(){
-  const list=document.getElementById('tip-emp-list');
-  if(!S.employees.length){list.innerHTML='<div style="color:var(--muted);font-size:13px;">Add employees first</div>';return;}
+  const list=document.getElementById('tip-emp-list');if(!list)return;
+  if(!S.employees.length){list.innerHTML='<div style="color:var(--muted);font-size:13px;padding:8px 0;">Add employees first</div>';return;}
   list.innerHTML=S.employees.map(e=>{
     const on=_tipChecked[e.id]==='auto'||_tipChecked[e.id]===true;
     const isAuto=_tipChecked[e.id]==='auto';
@@ -811,16 +847,14 @@ function renderTipsList(){
   }).join('');
   calcTips();
 }
-
 window.toggleTip=function(id){
   const cur=_tipChecked[id];
-  // cycle: false → true(manual) → false; auto → false(manual override) → auto... no, just toggle
-  if(cur==='auto') _tipChecked[id]=false;       // deselect auto worker
-  else if(cur===true) _tipChecked[id]=false;    // deselect manual
-  else _tipChecked[id]=true;                    // select manually
+  // Toggle: auto→false (manual remove), true→false, false/undefined→true (manual add)
+  if(cur==='auto')_tipChecked[id]=false;
+  else if(cur===true)_tipChecked[id]=false;
+  else _tipChecked[id]=true;
   renderTipsList();
 };
-
 window.calcTips=function(){
   const total=parseFloat(document.getElementById('tip-total')?.value)||0;
   const sp=parseFloat(document.getElementById('tip-pct-s')?.value)||0;
@@ -830,8 +864,8 @@ window.calcTips=function(){
   const srvs=sel.filter(e=>e.role==='Server'),bbs=sel.filter(e=>e.role==='Busboy');
   let asp=0,abp=0;
   if(srvs.length&&bbs.length){asp=sp;abp=bp;}
-  else if(srvs.length){asp=100;}
-  else if(bbs.length){abp=100;}
+  else if(srvs.length)asp=100;
+  else if(bbs.length)abp=100;
   const spool=total*asp/100,bpool=total*abp/100;
   let summLines='';
   S.employees.forEach(e=>{
@@ -847,16 +881,12 @@ window.calcTips=function(){
       <span style="color:var(--muted);">${e.name} <span style="font-size:11px;">(${e.role})</span></span>
       <strong style="color:var(--green);">$${amt.toFixed(2)}</strong></div>`;
   });
-  const sumEl=document.getElementById('tip-summary');
-  if(!sumEl)return;
+  const sumEl=document.getElementById('tip-summary');if(!sumEl)return;
   if(!total||!sel.length){sumEl.innerHTML='<div style="color:var(--muted);font-size:13px;">Select employees and enter tip amount</div>';return;}
   sumEl.innerHTML=summLines+`<div style="display:flex;justify-content:space-between;font-size:15px;font-weight:700;margin-top:10px;"><span>Total Distributed</span><span style="color:var(--green);">$${(spool+bpool).toFixed(2)}</span></div>`;
 };
-
-// render saved tips for currently selected date — shows immediately after save
 function renderSavedTips(){
-  const container=document.getElementById('saved-tips-list');
-  if(!container)return;
+  const container=document.getElementById('saved-tips-list');if(!container)return;
   const dayTips=S.tips.filter(t=>t.date===_tipDate).sort((a,b)=>b.id-a.id);
   if(!dayTips.length){container.innerHTML='<div style="color:var(--muted);font-size:13px;padding:8px 0;">No tips saved for this day yet</div>';return;}
   container.innerHTML=dayTips.map(t=>{
@@ -865,26 +895,23 @@ function renderSavedTips(){
     const srvs=sel.filter(e=>e.role==='Server'),bbs=sel.filter(e=>e.role==='Busboy');
     let asp=0,abp=0;
     if(srvs.length&&bbs.length){asp=t.serverPct;abp=t.busboyPct;}
-    else if(srvs.length){asp=100;}else if(bbs.length){abp=100;}
+    else if(srvs.length)asp=100;else if(bbs.length)abp=100;
     const spool=t.total*asp/100,bpool=t.total*abp/100;
     const lines=sel.map(e=>{
       let amt=0;
-      if(e.role==='Server'&&srvs.length) amt=spool/srvs.length;
-      if(e.role==='Busboy'&&bbs.length) amt=bpool/bbs.length;
-      return`<div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0;">
-        <span style="color:var(--muted);">${e.name}</span><span style="color:var(--green);">$${amt.toFixed(2)}</span></div>`;
+      if(e.role==='Server'&&srvs.length)amt=spool/srvs.length;
+      if(e.role==='Busboy'&&bbs.length)amt=bpool/bbs.length;
+      return`<div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0;"><span style="color:var(--muted);">${e.name}</span><span style="color:var(--green);">$${amt.toFixed(2)}</span></div>`;
     }).join('');
     return`<div class="saved-tip-entry">
       <div class="saved-tip-header">
         <div style="font-size:15px;font-weight:700;color:var(--amber);">$${t.total.toFixed(2)}</div>
         <button class="saved-tip-del" onclick="deleteTip('${t.id}')">×</button>
       </div>
-      <div class="saved-tip-names">${recs}</div>
-      ${lines}
+      <div class="saved-tip-names">${recs}</div>${lines}
     </div>`;
   }).join('');
 }
-
 window.saveTips=function(){
   const total=parseFloat(document.getElementById('tip-total').value)||0;
   if(total<=0){toast('Enter a tip amount');return;}
@@ -897,11 +924,8 @@ window.saveTips=function(){
   save();
   toast('Tip entry saved ✓');
   document.getElementById('tip-total').value=0;
-  calcTips();
-  renderSavedTips();  // immediately show the saved tip
-  renderSummary();
+  calcTips();renderSavedTips();renderSummary();
 };
-
 window.deleteTip=function(id){
   S.tips=S.tips.filter(t=>String(t.id)!==String(id));
   save();renderSavedTips();renderSummary();toast('Tip removed');
@@ -1008,37 +1032,53 @@ window.openHistory=function(){
 // ═══════════════════════════════════════════════
 // SETTINGS
 // ═══════════════════════════════════════════════
-function renderSettings(){document.getElementById('cred-disp').textContent='Username: '+S.auth.username;document.getElementById('rates-disp').textContent=`Server $${S.rates.server}/hr · Busboy $${S.rates.busboy}/hr`;}
-window.openCredModal=function(){document.getElementById('new-u').value=S.auth.username;document.getElementById('new-p').value='';document.getElementById('conf-p').value='';document.getElementById('cred-modal').classList.add('open');};
+function renderSettings(){
+  document.getElementById('cred-disp').textContent='Username: '+(_cu||'');
+  document.getElementById('rates-disp').textContent=`Server $${S.rates.server}/hr · Busboy $${S.rates.busboy}/hr`;
+}
+window.openCredModal=function(){
+  document.getElementById('new-u').value=_cu||'';
+  document.getElementById('new-p').value='';document.getElementById('conf-p').value='';
+  document.getElementById('cred-modal').classList.add('open');
+};
 window.saveCredentials=function(){
   const u=document.getElementById('new-u').value.trim(),p=document.getElementById('new-p').value,c=document.getElementById('conf-p').value;
-  if(!u){toast('Enter a username');return;}if(p&&p!==c){toast('Passwords do not match');return;}
-  S.auth.username=u;if(p)S.auth.password=p;
-  save();closeM('cred-modal');renderSettings();toast('Credentials updated — saved securely');
+  if(!u){toast('Enter a username');return;}
+  if(p&&p!==c){toast('Passwords do not match');return;}
+  const oldU=_cu;
+  const acct=getAcct(oldU);
+  const newPass=p||(acct?acct.password:'Ayvanagoodfood');
+  // If username changed, migrate data to new key
+  if(u.toLowerCase()!==oldU.toLowerCase()){
+    upsertAcct(u,newPass);       // create new account
+    saveUD(u,S);                 // copy data to new key
+    // Remove old session/account only if different
+    clearSess();
+    _cu=u;saveSess(u);
+  }else{
+    upsertAcct(u,newPass);       // update password in place
+    _cu=u;saveSess(u);save();
+  }
+  renderSettings();closeM('cred-modal');toast('Credentials saved ✓');
 };
 window.clearData=function(){
   showConfirm('Clear ALL data? This cannot be undone.','Clear All','#EF4444',()=>{
-    S.employees=[];S.schedules={};S.tips=[];S.notes={};S.weekOffset=0;_tipChecked={};
-    save();renderHome();renderEmployees();renderSchedule();renderTips();renderSummary();toast('Data cleared');
+    S=defData();_tipChecked={};save();
+    renderHome();renderEmployees();renderSchedule();renderTips();renderSummary();toast('Data cleared');
   });
 };
 
 // ═══════════════════════════════════════════════
-// PWA ICON — calligraphy "MyAyvana" on metallic black
+// PWA ICON
 // ═══════════════════════════════════════════════
 function setupPWAIcon(){
-  // Generate icon as SVG → data URI → canvas → png data URI
   const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
     <defs>
       <linearGradient id="mg" x1="0%" y1="0%" x2="100%" y2="100%">
-        <stop offset="0%" style="stop-color:#1a1a1a"/>
-        <stop offset="40%" style="stop-color:#2d2d2d"/>
-        <stop offset="100%" style="stop-color:#0a0a0a"/>
+        <stop offset="0%" style="stop-color:#1a1a1a"/><stop offset="40%" style="stop-color:#2d2d2d"/><stop offset="100%" style="stop-color:#0a0a0a"/>
       </linearGradient>
       <linearGradient id="tg" x1="0%" y1="0%" x2="100%" y2="100%">
-        <stop offset="0%" style="stop-color:#ffffff"/>
-        <stop offset="50%" style="stop-color:#e8e0d5"/>
-        <stop offset="100%" style="stop-color:#c8c0b0"/>
+        <stop offset="0%" style="stop-color:#ffffff"/><stop offset="50%" style="stop-color:#e8e0d5"/><stop offset="100%" style="stop-color:#c8c0b0"/>
       </linearGradient>
     </defs>
     <rect width="512" height="512" rx="100" fill="url(#mg)"/>
@@ -1048,15 +1088,12 @@ function setupPWAIcon(){
     <text x="256" y="380" text-anchor="middle" font-family="Arial,sans-serif" font-size="22" fill="rgba(245,158,11,0.7)" letter-spacing="6">RESTAURANT</text>
   </svg>`;
   const encoded='data:image/svg+xml;base64,'+btoa(svg);
-  // Set favicon
   document.getElementById('favicon-svg').href=encoded;
-  // For apple-touch-icon, convert to canvas png
   const img=new Image();img.onload=function(){
-    const c=document.createElement('canvas');c.width=180;c.height=180;
-    const ctx=c.getContext('2d');ctx.drawImage(img,0,0,180,180);
-    document.getElementById('pwa-icon').href=c.toDataURL('image/png');
+    const cv=document.createElement('canvas');cv.width=180;cv.height=180;
+    cv.getContext('2d').drawImage(img,0,0,180,180);
+    document.getElementById('pwa-icon').href=cv.toDataURL('image/png');
   };img.src=encoded;
-  // Inline manifest for PWA
   const manifest={name:'My Ayvana',short_name:'MyAyvana',start_url:'.',display:'standalone',background_color:'#0F1117',theme_color:'#0F1117',icons:[{src:encoded,sizes:'512x512',type:'image/svg+xml'}]};
   const mBlob=new Blob([JSON.stringify(manifest)],{type:'application/json'});
   document.getElementById('pwa-manifest').href=URL.createObjectURL(mBlob);
@@ -1068,26 +1105,37 @@ function setupPWAIcon(){
 window.closeM=closeM;
 
 function initApp(){
-  S.employees.forEach(e=>{const n=parseInt(e.id.replace('e',''));if(!isNaN(n)&&n>=_eid)_eid=n+1;});
-  const today=new Date();_schedDay=today.getDay()===0?6:today.getDay()-1;
+  const today=new Date();
+  _schedDay=today.getDay()===0?6:today.getDay()-1;
   _tipDate=today.toISOString().split('T')[0];
+  _tipChecked={};
   renderHome();renderEmployees();renderSchedule();renderTips();renderSummary();renderSettings();
 }
 
 window.onload=function(){
   setupPWAIcon();
-  load();
-  if(S.auth.loggedIn){
-    document.getElementById('login-screen').style.display='none';
-    document.getElementById('app').classList.add('visible');
-    initApp();
+  bootstrapAcct(); // ensure Ali/Ayvanagoodfood exists if never set up
+  // Auto-login from saved session
+  const sess=loadSess();
+  if(sess&&sess.loggedIn&&sess.username){
+    const acct=getAcct(sess.username);
+    if(acct){
+      loadForUser(acct.username);
+      document.getElementById('login-screen').style.display='none';
+      document.getElementById('app').classList.add('visible');
+      initApp();
+    }
   }
   document.getElementById('lp').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin();});
   document.getElementById('lu').addEventListener('keydown',e=>{if(e.key==='Enter')document.getElementById('lp').focus();});
   document.querySelectorAll('.mo').forEach(o=>o.addEventListener('click',e=>{if(e.target===o)o.classList.remove('open');}));
+  // Save on page hide/unload for extra reliability
+  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')save();});
+  window.addEventListener('pagehide',()=>save());
+  window.addEventListener('beforeunload',()=>save());
 };
 
-})(); // end IIFE — wraps all logic, nothing leaks to global scope
+})(); // end IIFE
 </script>
 </body>
 </html>
