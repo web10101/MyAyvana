@@ -1,4 +1,9 @@
 {
+  "functions": {
+    "api/data.mjs": {
+      "runtime": "nodejs20.x"
+    }
+  },
   "rewrites": [
     {
       "source": "/((?!api/).*)",
