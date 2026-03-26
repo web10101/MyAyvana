@@ -1,90 +1,69 @@
-# My Ayvana — Vercel Deployment Guide
+# My Ayvana — Vercel + Blob Storage (v5, production-ready)
 
-## Project Structure
+## What was wrong before and what's fixed
+
+| Problem | Fix |
+|---------|-----|
+| `api/data.js` used ESM `import` but no `"type":"module"` in package.json → Vercel couldn't parse it | Added `"type": "module"` to package.json |
+| `vercel.json` routed `/(.*) → /index.html` but the file lives in `/public/` | Added `"outputDirectory": "public"` to vercel.json |
+| `saveAccounts` was fire-and-forget (race condition on credential changes) | Now `await`ed on all credential operations |
+| No loader shown while Blob API calls complete | Loading overlay added for login, session restore, credential save |
+
+---
+
+## Project layout
 
 ```
 my-ayvana/
 ├── api/
-│   └── data.js          ← Serverless function (Vercel Blob backend)
+│   └── data.js          ← Vercel serverless function (Blob I/O)
 ├── public/
-│   └── index.html       ← The full app (calls /api/data)
-├── package.json
-├── vercel.json
+│   └── index.html       ← Full app (calls /api/data)
+├── package.json         ← "type":"module" ← critical
+├── vercel.json          ← outputDirectory + rewrites
 └── README.md
+```
+
+## Blob file layout (inside my-ayvana-blob)
+
+```
+ayvana/accounts.json        ← { "ali": { username, password } }
+ayvana/users/user-Ali.json  ← Ali's full app data
+ayvana/users/user-Bob.json  ← Bob's full app data
 ```
 
 ---
 
-## Quick Deploy (5 steps)
+## Deploy
 
-### 1. Install Vercel CLI
+### 1. Install dependencies
 ```bash
 npm install -g vercel
-```
-
-### 2. Install dependencies
-```bash
 cd my-ayvana
 npm install
 ```
 
-### 3. Link to your Vercel account
+### 2. Link to your Vercel project
 ```bash
 vercel link
+# Select your team / project
 ```
-Follow the prompts. Select your team/account.
 
-### 4. Add your Blob token as an environment variable
-In the Vercel dashboard → your project → Settings → Environment Variables, add:
+### 3. Set the blob token
+In **Vercel Dashboard → Project → Settings → Environment Variables**:
 
 | Name | Value |
 |------|-------|
-| `BLOB_READ_WRITE_TOKEN` | your token from Vercel Storage → `my-ayvana-blob` → `.env.local` |
+| `BLOB_READ_WRITE_TOKEN` | token from my-ayvana-blob → .env.local |
 
 Or via CLI:
 ```bash
-vercel env add BLOB_READ_WRITE_TOKEN
-# paste your token when prompted
+vercel env add BLOB_READ_WRITE_TOKEN production
 ```
 
-### 5. Deploy
+### 4. Deploy
 ```bash
 vercel --prod
-```
-
-Your app is live at `https://my-ayvana.vercel.app` (or whatever URL Vercel assigns).
-
----
-
-## How Vercel Blob is used
-
-All user data is stored in your `my-ayvana-blob` store under these paths:
-
-```
-ayvana/accounts.json           ← all registered users + passwords
-ayvana/users/ali.json          ← Ali's data (employees, schedules, tips…)
-ayvana/users/bob.json          ← another user's data
-```
-
-The API route (`api/data.js`) is the only place that holds the blob token.
-The browser never sees the token — it just calls `/api/data`.
-
-### Write-through caching
-Every save writes to localStorage immediately (so the UI is instant),
-then pushes to Vercel Blob in the background. On next login, Blob is
-checked first for the latest data, falling back to the local cache if
-offline.
-
----
-
-## Local development
-```bash
-vercel dev
-```
-This runs the serverless functions locally. You still need the
-`BLOB_READ_WRITE_TOKEN` in a local `.env` file:
-```
-BLOB_READ_WRITE_TOKEN=vercel_blob_rw_xxxxxxxxxxxxxxxx
 ```
 
 ---
@@ -93,16 +72,20 @@ BLOB_READ_WRITE_TOKEN=vercel_blob_rw_xxxxxxxxxxxxxxxx
 - **Username:** Ali
 - **Password:** Ayvanagoodfood
 
-Change credentials in the app → Settings → Change Credentials.
-Password changes are saved to Vercel Blob immediately.
+---
+
+## Local development
+```bash
+# Create .env in the project root:
+echo "BLOB_READ_WRITE_TOKEN=vercel_blob_rw_xxxxxxxx" > .env
+vercel dev
+```
 
 ---
 
-## Security notes
-- The blob token lives only in `process.env` on Vercel servers
-- Blob file paths use sanitised, lowercase-only usernames
-- All blobs are stored with `access: 'public'` (Vercel Blob requirement)
-  but URLs are long random strings — not guessable
-- Passwords are stored as plaintext in this version. For a production
-  restaurant app with multiple staff, consider adding bcrypt hashing
-  via `npm install bcryptjs` in the API route.
+## How saves work
+1. Every change calls `save()` which:
+   - Writes to `localStorage` immediately (UI is instant)
+   - Posts to `/api/data` in the background (fire-and-forget)
+2. On login, `/api/data?action=getUser` is called first; localStorage is the fallback
+3. On logout, a final `await pushUserData()` ensures the last state is flushed to Blob before the session clears

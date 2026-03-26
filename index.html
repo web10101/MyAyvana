@@ -418,99 +418,110 @@ body{height:100%;background:#0F1117!important;color:#EEE9E3;font-family:'DM Sans
 <div id="toast"></div>
 
 <script>
+/* global fetch, localStorage, URL, URLSearchParams, Blob */
 (function () {
 'use strict';
 
 // ════════════════════════════════════════════════════════════════
 //  STORAGE LAYER
 //  ─────────────────────────────────────────────────────────────
-//  Primary:   Vercel Blob  (via /api/data serverless function)
-//  Fallback:  localStorage (write-through cache — instant UI,
-//             also works if Blob is temporarily unreachable)
+//  Every read/write goes through /api/data (the Vercel serverless
+//  function that talks to Vercel Blob).
 //
-//  Blob file layout:
-//    ayvana/accounts.json        ← { "ali": {username, password}, … }
-//    ayvana/users/user-Ali.json  ← Ali's full app data
-//    ayvana/users/user-Bob.json  ← Bob's full app data
+//  localStorage is used as a write-through cache so the UI is
+//  instant and the app still works if the network is slow.
+//
+//  Save order guarantee:
+//    - cacheUserData()  → localStorage (sync, instant)
+//    - pushUserData()   → /api/data    (async, awaited on login
+//                         and credential change; fire-and-forget
+//                         on every keystroke save so UI doesn't stall)
 // ════════════════════════════════════════════════════════════════
 
 const API = '/api/data';
 
-// ── localStorage cache helpers ───────────────────────────────────
-function lcSet(k, v)  { try { localStorage.setItem(k, JSON.stringify(v)); }  catch (_) {} }
-function lcGet(k)     { try { const r = localStorage.getItem(k); return r ? JSON.parse(r) : null; } catch (_) { return null; } }
-function lcDel(k)     { try { localStorage.removeItem(k); }  catch (_) {} }
+// ── localStorage helpers ──────────────────────────────────────────
+function lsSet(k, v)  { try { localStorage.setItem(k, JSON.stringify(v)); } catch (_) {} }
+function lsGet(k)     { try { const r = localStorage.getItem(k); return r ? JSON.parse(r) : null; } catch (_) { return null; } }
+function lsDel(k)     { try { localStorage.removeItem(k); } catch (_) {} }
 
-// ── Blob API wrappers ────────────────────────────────────────────
-async function blobGet(params) {
+// ── /api/data wrappers ────────────────────────────────────────────
+async function apiGET(params) {
   try {
-    const qs = new URLSearchParams(params).toString();
-    const r  = await fetch(`${API}?${qs}`);
-    if (!r.ok) return null;
+    const r = await fetch(API + '?' + new URLSearchParams(params));
+    if (!r.ok) { console.warn('[apiGET]', r.status, await r.text()); return null; }
     const j = await r.json();
-    return j.ok ? j.data : null;
-  } catch (_) { return null; }
+    if (!j.ok) { console.warn('[apiGET] not ok:', j.error); return null; }
+    return j.data;
+  } catch (e) { console.error('[apiGET]', e.message); return null; }
 }
 
-async function blobPost(body) {
+async function apiPOST(body) {
   try {
     const r = await fetch(API, {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify(body),
     });
+    if (!r.ok) { console.warn('[apiPOST]', r.status, await r.text()); return false; }
     const j = await r.json();
+    if (!j.ok) { console.warn('[apiPOST] not ok:', j.error); }
     return j.ok === true;
-  } catch (_) { return false; }
+  } catch (e) { console.error('[apiPOST]', e.message); return false; }
 }
 
-// ── Accounts  (ayvana/accounts.json) ────────────────────────────
-// Cached under localStorage key "av4_accounts"
+// ── Accounts  →  ayvana/accounts.json ────────────────────────────
 async function loadAccounts() {
-  const fromBlob = await blobGet({ action: 'getAccounts' });
-  if (fromBlob !== null) { lcSet('av4_accounts', fromBlob); return fromBlob; }
-  return lcGet('av4_accounts') ?? {};
+  // Blob first (authoritative), localStorage as fallback
+  const fromBlob = await apiGET({ action: 'getAccounts' });
+  if (fromBlob !== null) { lsSet('av5_accounts', fromBlob); return fromBlob; }
+  return lsGet('av5_accounts') ?? {};
 }
+
+// Always awaited — credential operations must be synchronous from the user's perspective
 async function saveAccounts(accts) {
-  lcSet('av4_accounts', accts);                                   // instant
-  blobPost({ action: 'saveAccounts', accounts: accts });          // async push
+  lsSet('av5_accounts', accts);
+  await apiPOST({ action: 'saveAccounts', accounts: accts });
 }
+
 async function getAccount(username) {
   const a = await loadAccounts();
   return a[username.toLowerCase()] ?? null;
 }
+
 async function upsertAccount(username, password) {
   const a = await loadAccounts();
   a[username.toLowerCase()] = { username, password };
   await saveAccounts(a);
 }
 
-// ── Per-user data  (ayvana/users/user-<name>.json) ───────────────
-// Cached under localStorage key "av4_u_<name>"
-function lcUserKey(u) { return 'av4_u_' + u.toLowerCase(); }
+// ── Per-user data  →  ayvana/users/user-<name>.json ────────────────
+function lsUserKey(u) { return 'av5_u_' + u.toLowerCase(); }
 
 async function loadUserData(username) {
-  const fromBlob = await blobGet({ action: 'getUser', user: username });
-  if (fromBlob !== null) { lcSet(lcUserKey(username), fromBlob); return fromBlob; }
-  return lcGet(lcUserKey(username));
+  const fromBlob = await apiGET({ action: 'getUser', user: username });
+  if (fromBlob !== null) { lsSet(lsUserKey(username), fromBlob); return fromBlob; }
+  return lsGet(lsUserKey(username));
 }
-function cacheUserData(username, data)       { lcSet(lcUserKey(username), data); }
-async function pushUserData(username, data)  { return blobPost({ action: 'saveUser', user: username, data }); }
 
-// ── Session  (localStorage only — browser-local is fine) ─────────
-function saveSession(u)  { lcSet('av4_session', { username: u, ts: Date.now() }); }
-function loadSession()   { return lcGet('av4_session'); }
-function clearSession()  { lcDel('av4_session'); }
+function cacheUserData(username, data) { lsSet(lsUserKey(username), data); }
 
-// ── Default data for a brand-new user ────────────────────────────
+// Awaited only for critical paths (login, credential change, logout)
+async function pushUserData(username, data) {
+  return apiPOST({ action: 'saveUser', user: username, data });
+}
+
+// ── Session  (localStorage only — intentionally browser-local) ─────
+function saveSession(u)  { lsSet('av5_sess', { username: u, ts: Date.now() }); }
+function loadSession()   { return lsGet('av5_sess'); }
+function clearSession()  { lsDel('av5_sess'); }
+
+// ── Default empty dataset for a new user ───────────────────────────
 function defData() {
   return {
-    employees: [],
-    schedules: {},
-    tips:      [],
-    notes:     {},
-    rates:     { server: 15, busboy: 12 },
-    tipPcts:   { server: 70, busboy: 30 },
+    employees: [], schedules: {}, tips: [], notes: {},
+    rates:   { server: 15, busboy: 12 },
+    tipPcts: { server: 70, busboy: 30 },
     weekOffset: 0,
   };
 }
@@ -518,17 +529,18 @@ function defData() {
 // ════════════════════════════════════════════════════════════════
 //  RUNTIME STATE
 // ════════════════════════════════════════════════════════════════
-let S    = defData();
-let _cu  = null;       // current username (canonical casing)
+let S   = defData();
+let _cu = null;          // current username (canonical casing from accounts store)
 
-// Write-through save: localStorage instantly, Blob in background
+// Write-through save called on every data change:
+//   - localStorage write is synchronous → UI updates instantly
+//   - Blob push is async fire-and-forget → no UI stall
 function save() {
   if (!_cu) return;
   cacheUserData(_cu, S);
-  pushUserData(_cu, S);   // fire-and-forget
+  pushUserData(_cu, S);  // fire-and-forget intentional
 }
 
-// ── UI counters / ephemeral state ────────────────────────────────
 let _eid = 1, _editId = null, _shiftEid = null, _shiftDk = null,
     _schedDay = 0, _tipDate = null, _tipChecked = {},
     _notesDate = null, _confirmCb = null;
@@ -536,49 +548,48 @@ let _eid = 1, _editId = null, _shiftEid = null, _shiftDk = null,
 const DAYS = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
 const DKS  = ['mon','tue','wed','thu','fri','sat','sun'];
 
-// ────────────────────────────────────────────────────────────────
+// ════════════════════════════════════════════════════════════════
 //  LOADING OVERLAY
-// ────────────────────────────────────────────────────────────────
+// ════════════════════════════════════════════════════════════════
 function showLoader(msg) {
-  let el = document.getElementById('_av_loader');
+  let el = document.getElementById('_av5_loader');
   if (!el) {
     el = document.createElement('div');
-    el.id = '_av_loader';
-    el.style.cssText = [
-      'position:fixed;inset:0;z-index:9999',
-      'background:rgba(15,17,23,.93)',
-      'display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px',
-    ].join(';');
+    el.id = '_av5_loader';
+    el.style.cssText =
+      'position:fixed;inset:0;z-index:9999;background:rgba(15,17,23,.94);' +
+      'display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px';
     el.innerHTML =
-      '<div style="width:38px;height:38px;border:3px solid rgba(245,158,11,.2);' +
-      'border-top-color:#F59E0B;border-radius:50%;animation:_avspin .7s linear infinite"></div>' +
-      '<div id="_av_loader_msg" style="font-size:14px;color:#7B828F;letter-spacing:.5px"></div>';
+      '<div style="width:40px;height:40px;border:3px solid rgba(245,158,11,.15);' +
+      'border-top-color:#F59E0B;border-radius:50%;animation:_av5spin .7s linear infinite"></div>' +
+      '<div id="_av5_msg" style="font-size:13px;color:#7B828F;letter-spacing:.5px"></div>';
     const st = document.createElement('style');
-    st.textContent = '@keyframes _avspin{to{transform:rotate(360deg)}}';
+    st.textContent = '@keyframes _av5spin{to{transform:rotate(360deg)}}';
     document.head.appendChild(st);
     document.body.appendChild(el);
   }
-  document.getElementById('_av_loader_msg').textContent = msg || 'Loading…';
+  document.getElementById('_av5_msg').textContent = msg || 'Loading…';
   el.style.display = 'flex';
 }
 function hideLoader() {
-  const el = document.getElementById('_av_loader');
+  const el = document.getElementById('_av5_loader');
   if (el) el.style.display = 'none';
 }
 
 // ════════════════════════════════════════════════════════════════
 //  UTILS
 // ════════════════════════════════════════════════════════════════
-function p2(n)    { return String(n).padStart(2, '0'); }
-function t2m(t)   { const [h, m] = t.split(':').map(Number); return h * 60 + m; }
+function p2(n) { return String(n).padStart(2, '0'); }
+function t2m(t) { const [h, m] = t.split(':').map(Number); return h * 60 + m; }
 function calcH(s, e) { let d = t2m(e) - t2m(s); if (d < 0) d += 1440; return d / 60; }
 
 function wkStart(off = 0) {
   const d = new Date(), dy = d.getDay();
   d.setDate(d.getDate() - (dy === 0 ? 6 : dy - 1) + off * 7);
-  d.setHours(0, 0, 0, 0); return d;
+  d.setHours(0, 0, 0, 0);
+  return d;
 }
-function wkKey(off) { return wkStart(off).toISOString().split('T')[0]; }
+function wkKey(off)  { return wkStart(off).toISOString().split('T')[0]; }
 function wkLbl(off) {
   const s = wkStart(off), e = new Date(s); e.setDate(e.getDate() + 6);
   const f = d => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
@@ -598,11 +609,11 @@ function toast(msg) {
 // ════════════════════════════════════════════════════════════════
 //  CUSTOM CONFIRM  (window.confirm blocked in sandboxed iframes)
 // ════════════════════════════════════════════════════════════════
-window.showConfirm = function (msg, okLabel, okColor, cb) {
+window.showConfirm = function (msg, label, color, cb) {
   document.getElementById('confirm-msg').textContent = msg;
   const btn = document.getElementById('confirm-ok-btn');
-  btn.textContent = okLabel || 'Confirm';
-  btn.style.background = okColor || '#EF4444';
+  btn.textContent = label || 'OK';
+  btn.style.background = color || '#EF4444';
   btn.style.color = '#fff';
   _confirmCb = cb;
   document.getElementById('confirm-modal').classList.add('open');
@@ -614,8 +625,8 @@ window.confirmCancel = function () { closeM('confirm-modal'); _confirmCb = null;
 //  AUTH
 // ════════════════════════════════════════════════════════════════
 window.doLogin = async function () {
-  const uEl = document.getElementById('lu'), pEl = document.getElementById('lp');
-  const u = uEl.value.trim(), p = pEl.value;
+  const u = document.getElementById('lu').value.trim();
+  const p = document.getElementById('lp').value;
   if (!u || !p) { document.getElementById('lerr').textContent = 'Enter username and password.'; return; }
 
   showLoader('Signing in…');
@@ -623,20 +634,15 @@ window.doLogin = async function () {
 
   if (acct && acct.password === p) {
     showLoader('Loading your data…');
-    _cu = acct.username;               // use stored canonical casing
+    _cu = acct.username;
     const stored = await loadUserData(_cu);
     S = stored ? Object.assign(defData(), stored) : defData();
-    // Restore _eid counter so new IDs don't collide
-    _eid = 1;
-    S.employees.forEach(e => {
-      const n = parseInt((e.id || '').replace('e', ''));
-      if (!isNaN(n) && n >= _eid) _eid = n + 1;
-    });
+    _rebuildEid();
     saveSession(_cu);
     hideLoader();
     document.getElementById('login-screen').style.display = 'none';
     document.getElementById('app').classList.add('visible');
-    _initAfterLogin();
+    _initScreens();
   } else {
     hideLoader();
     document.getElementById('lerr').textContent = 'Incorrect username or password.';
@@ -646,16 +652,25 @@ window.doLogin = async function () {
 };
 
 window.doLogout = function () {
-  showConfirm('Sign out of My Ayvana?', 'Sign Out', '#EF4444', () => {
-    save();                    // flush any pending write
-    clearSession();
-    _cu = null; S = defData(); _tipChecked = {};
+  showConfirm('Sign out of My Ayvana?', 'Sign Out', '#EF4444', async () => {
+    showLoader('Saving…');
+    if (_cu) await pushUserData(_cu, S);   // ensure final save reaches Blob
+    hideLoader();
+    clearSession(); _cu = null; S = defData(); _tipChecked = {};
     document.getElementById('app').classList.remove('visible');
     document.getElementById('login-screen').style.display = 'flex';
     document.getElementById('lp').value = '';
     document.getElementById('lerr').textContent = '';
   });
 };
+
+function _rebuildEid() {
+  _eid = 1;
+  S.employees.forEach(e => {
+    const n = parseInt((e.id || '').replace('e', ''));
+    if (!isNaN(n) && n >= _eid) _eid = n + 1;
+  });
+}
 
 // ════════════════════════════════════════════════════════════════
 //  TABS
@@ -665,19 +680,10 @@ window.switchTab = function (name) {
   document.querySelectorAll('.tab-item').forEach(t => t.classList.remove('active'));
   document.getElementById('screen-' + name).classList.add('active');
   document.getElementById('tab-' + name).classList.add('active');
-  ({
-    home:      renderHome,
-    employees: renderEmployees,
-    schedule:  renderSchedule,
-    tips:      renderTips,
-    summary:   renderSummary,
-    settings:  renderSettings,
-  })[name]?.();
+  ({ home: renderHome, employees: renderEmployees, schedule: renderSchedule,
+     tips: renderTips, summary: renderSummary, settings: renderSettings })[name]?.();
 };
-window.changeWeek = function (d) {
-  S.weekOffset += d; save();
-  renderHome(); renderSchedule(); renderSummary();
-};
+window.changeWeek = function (d) { S.weekOffset += d; save(); renderHome(); renderSchedule(); renderSummary(); };
 
 // ════════════════════════════════════════════════════════════════
 //  EMPLOYEES
@@ -713,7 +719,7 @@ window.saveEmployee = function () {
 
 window.removeEmp = function (id) {
   const e = S.employees.find(x => x.id === id);
-  showConfirm(`Remove ${e ? e.name : 'this employee'}?`, 'Remove', '#EF4444', () => {
+  showConfirm(`Remove ${e ? e.name : 'employee'}?`, 'Remove', '#EF4444', () => {
     S.employees = S.employees.filter(x => x.id !== id);
     save(); renderEmployees(); renderHome(); toast('Employee removed');
   });
@@ -736,10 +742,8 @@ function renderEmployees() {
     <div style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin:0 16px 10px;">
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px;">
         <div class="av">${e.name[0].toUpperCase()}</div>
-        <div style="flex:1;">
-          <div style="font-weight:600;font-size:15px;">${e.name}</div>
-          <span class="badge b${e.role === 'Server' ? 's' : 'b'}">${e.role}</span>
-        </div>
+        <div style="flex:1;"><div style="font-weight:600;font-size:15px;">${e.name}</div>
+          <span class="badge b${e.role === 'Server' ? 's' : 'b'}">${e.role}</span></div>
         <div style="display:flex;gap:8px;">
           <button class="ibt" onclick="openEmpModal('${e.id}')">✏️</button>
           <button class="ibt" onclick="removeEmp('${e.id}')">🗑️</button>
@@ -755,7 +759,7 @@ function renderEmployees() {
 }
 
 // ════════════════════════════════════════════════════════════════
-//  SCHEDULE DATA HELPERS
+//  SCHEDULE DATA
 // ════════════════════════════════════════════════════════════════
 function setShift(eid, off, dk, st, en) {
   const wk = wkKey(off);
@@ -785,26 +789,24 @@ function empTips(eid, off) {
     if (d >= s && d <= en && t.receivers.includes(eid)) {
       const emp = S.employees.find(e => e.id === eid); if (!emp) return;
       const rr = t.receivers.filter(r => {
-        const e2 = S.employees.find(x => x.id === r);
-        return e2 && e2.role === emp.role;
+        const e2 = S.employees.find(x => x.id === r); return e2 && e2.role === emp.role;
       });
       if (!rr.length) return;
-      const pct = emp.role === 'Server' ? t.serverPct : t.busboyPct;
-      tot += (t.total * pct / 100) / rr.length;
+      tot += (t.total * (emp.role === 'Server' ? t.serverPct : t.busboyPct) / 100) / rr.length;
     }
   });
   return tot;
 }
 
-// Return employees whose scheduled shift overlaps [from, to] on dateStr
+// Workers whose scheduled shift overlaps [from, to] on a given date
 function workersInRange(dateStr, from, to) {
   const tgt = new Date(dateStr + 'T12:00:00');
-  const dy  = tgt.getDay();
-  const di  = dy === 0 ? 6 : dy - 1;
+  const di  = tgt.getDay() === 0 ? 6 : tgt.getDay() - 1;
   const dk  = DKS[di];
+  // Search up to ±52 weeks to find the right schedule week
   for (let off = -52; off <= 52; off++) {
-    const s = wkStart(off), e = new Date(s); e.setDate(e.getDate() + 6);
-    if (tgt >= s && tgt <= e) {
+    const ws = wkStart(off), we = new Date(ws); we.setDate(we.getDate() + 6);
+    if (tgt >= ws && tgt <= we) {
       const b  = S.schedules[wkKey(off)] || {};
       const fm = t2m(from), tm = t2m(to);
       return S.employees.filter(emp => {
@@ -823,71 +825,57 @@ function renderSchedule() {
   document.getElementById('sw-lbl').textContent = wkLbl(S.weekOffset);
   const wk = wkKey(S.weekOffset);
   document.getElementById('sched-pills').innerHTML = DAYS.map((day, i) => {
-    const d   = dayDate(S.weekOffset, i);
-    const dk  = DKS[i];
-    const cnt = S.employees.filter(e => S.schedules[wk]?.[e.id]?.[dk]).length;
+    const cnt = S.employees.filter(e => S.schedules[wk]?.[e.id]?.[DKS[i]]).length;
     return `<div class="dpill${_schedDay === i ? ' active' : ''}" onclick="selDay(${i})">
       <div class="dpill-n">${day}</div>
-      <div class="dpill-d">${d.getDate()}</div>
-      <div class="dpill-c">${cnt ? cnt + ' on' : ' '}</div>
+      <div class="dpill-d">${dayDate(S.weekOffset, i).getDate()}</div>
+      <div class="dpill-c">${cnt ? cnt + ' on' : '\u00a0'}</div>
     </div>`;
   }).join('');
   renderSchedContent();
 }
-window.selDay = function (i) { _schedDay = i; renderSchedule(); };
+window.selDay = i => { _schedDay = i; renderSchedule(); };
 
 function renderSchedContent() {
-  const off     = S.weekOffset;
-  const dk      = DKS[_schedDay];
-  const wk      = wkKey(off);
-  const dd      = dayDate(off, _schedDay);
-  const dateStr = dd.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+  const off = S.weekOffset, dk = DKS[_schedDay], wk = wkKey(off);
+  const dateStr = dayDate(off, _schedDay).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
   const content = document.getElementById('sched-content');
-
   if (!S.employees.length) {
     content.innerHTML = '<div style="text-align:center;padding:40px 20px;color:var(--muted)"><div style="font-size:36px;margin-bottom:10px">👥</div><div>Add team members first</div></div>';
     return;
   }
-  const onShift  = S.employees.filter(e =>  S.schedules[wk]?.[e.id]?.[dk]);
-  const offShift = S.employees.filter(e => !S.schedules[wk]?.[e.id]?.[dk]);
+  const on  = S.employees.filter(e =>  S.schedules[wk]?.[e.id]?.[dk]);
+  const off_ = S.employees.filter(e => !S.schedules[wk]?.[e.id]?.[dk]);
   let html = `<div style="padding:0 16px 10px;font-size:14px;font-weight:600;color:var(--cream);">${dateStr}</div>`;
-
-  if (onShift.length) {
-    html += `<div class="sec-title">ON SHIFT (${onShift.length})</div>`;
-    html += onShift.map(emp => {
+  if (on.length) {
+    html += `<div class="sec-title">ON SHIFT (${on.length})</div>`;
+    html += on.map(emp => {
       const sh = S.schedules[wk][emp.id][dk];
       return `<div class="shift-card">
         <div class="av">${emp.name[0]}</div>
-        <div style="flex:1;">
-          <div style="font-weight:600;font-size:14px;">${emp.name}</div>
+        <div style="flex:1;"><div style="font-weight:600;font-size:14px;">${emp.name}</div>
           <div style="font-size:13px;color:var(--amber);font-weight:600;margin-top:2px;">${sh.start} – ${sh.end}</div>
-          <div style="font-size:11px;color:var(--muted);">${sh.hours.toFixed(1)} hours</div>
-        </div>
+          <div style="font-size:11px;color:var(--muted);">${sh.hours.toFixed(1)} hours</div></div>
         <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end;">
           <button style="background:rgba(255,255,255,.07);border:none;border-radius:8px;padding:5px 12px;font-size:12px;color:var(--cream);cursor:pointer;font-family:'DM Sans',sans-serif;" onclick="openShiftModal('${emp.id}','${dk}')">✏️ Edit</button>
           <button style="background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.25);border-radius:8px;padding:5px 12px;font-size:12px;color:var(--red);cursor:pointer;font-family:'DM Sans',sans-serif;" onclick="rmShift('${emp.id}',${off},'${dk}')">Remove</button>
-        </div>
-      </div>`;
+        </div></div>`;
     }).join('');
   }
-  if (offShift.length) {
-    html += `<div class="sec-title" style="margin-top:${onShift.length ? 12 : 0}px;">ADD TO SHIFT</div>`;
-    html += offShift.map(emp => `
+  if (off_.length) {
+    html += `<div class="sec-title" style="margin-top:${on.length ? 12 : 0}px;">ADD TO SHIFT</div>`;
+    html += off_.map(emp => `
       <div class="add-member-card" onclick="openShiftModal('${emp.id}','${dk}')">
         <div class="av" style="background:rgba(255,255,255,.04);border-color:var(--border);color:var(--muted);">${emp.name[0]}</div>
-        <div style="flex:1;">
-          <div style="font-weight:600;font-size:14px;">${emp.name}</div>
-          <span class="badge b${emp.role === 'Server' ? 's' : 'b'}">${emp.role}</span>
-        </div>
+        <div style="flex:1;"><div style="font-weight:600;font-size:14px;">${emp.name}</div>
+          <span class="badge b${emp.role === 'Server' ? 's' : 'b'}">${emp.role}</span></div>
         <div style="color:var(--amber);font-size:22px;">+</div>
       </div>`).join('');
   }
   content.innerHTML = html;
 }
 
-window.rmShift = function (eid, off, dk) {
-  delShift(eid, off, dk); renderSchedule(); renderHome(); toast('Shift removed');
-};
+window.rmShift = (eid, off, dk) => { delShift(eid, off, dk); renderSchedule(); renderHome(); toast('Shift removed'); };
 
 window.openShiftModal = function (eid, dk) {
   _shiftEid = eid; _shiftDk = dk;
@@ -936,16 +924,13 @@ window.saveShift = function () {
 window.copySchedule = function () {
   const off = S.weekOffset;
   const lines = ['📅 WEEKLY SCHEDULE', wkLbl(off), '─'.repeat(30)];
-  DAYS.forEach((day, i) => {
-    const dk      = DKS[i];
-    const dd      = dayDate(off, i);
-    const wk      = wkKey(off);
+  DAYS.forEach((_, i) => {
+    const dk = DKS[i], dd = dayDate(off, i), wk = wkKey(off);
     const dateStr = dd.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
     const workers = S.employees.filter(e => S.schedules[wk]?.[e.id]?.[dk]);
     lines.push('', dateStr);
-    if (!workers.length) {
-      lines.push('  No shifts scheduled');
-    } else {
+    if (!workers.length) { lines.push('  No shifts scheduled'); }
+    else {
       workers.forEach(emp => {
         const sh = S.schedules[wk][emp.id][dk];
         lines.push(`  • ${emp.name}  ${sh.start}–${sh.end}  (${sh.hours.toFixed(1)}h)`);
@@ -956,16 +941,10 @@ window.copySchedule = function () {
   const totH = S.employees.reduce((s, e) => s + parseFloat(empWeekH(e.id, off)), 0);
   lines.push('', '─'.repeat(30), `Total weekly hours: ${totH.toFixed(1)} hrs`);
   const text = lines.join('\n');
-  const btn  = document.getElementById('copy-btn');
-  function ok() {
-    btn.textContent = '✅ Copied!'; btn.style.background = 'rgba(16,185,129,.25)';
-    setTimeout(() => { btn.textContent = '📋 Copy Schedule as Text'; btn.style.background = ''; }, 2500);
-  }
-  if (navigator.clipboard && window.isSecureContext) {
-    navigator.clipboard.writeText(text).then(ok).catch(() => fbCopy(text));
-  } else {
-    fbCopy(text);
-  }
+  const btn = document.getElementById('copy-btn');
+  function ok() { btn.textContent = '✅ Copied!'; btn.style.background = 'rgba(16,185,129,.25)'; setTimeout(() => { btn.textContent = '📋 Copy Schedule as Text'; btn.style.background = ''; }, 2500); }
+  if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(text).then(ok).catch(() => fbCopy(text));
+  else fbCopy(text);
   function fbCopy(txt) {
     const ta = document.createElement('textarea');
     ta.value = txt; ta.style.cssText = 'position:fixed;top:0;left:0;opacity:0;width:1px;height:1px;';
@@ -977,11 +956,10 @@ window.copySchedule = function () {
 
 // ════════════════════════════════════════════════════════════════
 //  TIPS
-//  ─────────────────────────────────────────────────────────────
-//  _tipChecked[empId] values:
-//    'auto'  → auto-selected because their shift overlaps the range
+//  _tipChecked[empId]:
+//    'auto'  → selected because their shift overlaps the time range
 //    true    → manually added by user
-//    false   → not selected (or manually removed)
+//    false   → not selected (or explicitly removed)
 // ════════════════════════════════════════════════════════════════
 function fmtTipDate(k) {
   if (!k) return '—';
@@ -1007,14 +985,13 @@ function buildTipDateStrip() {
   }).join('');
 }
 window.selTipDate = function (k) {
-  // Clear only auto-selections when switching date; keep manual ones
   S.employees.forEach(e => { if (_tipChecked[e.id] === 'auto') _tipChecked[e.id] = false; });
   _tipDate = k;
   buildTipDateStrip(); updateTipHeader(); autoLoadTipWorkers(); renderSavedTips();
 };
 window.onTipTimeChange = function () { updateTipHeader(); autoLoadTipWorkers(); };
 
-// Auto-select workers based on scheduled shift overlap
+// Auto-select workers from saved schedule based on time range
 function autoLoadTipWorkers() {
   if (!_tipDate || !S.employees.length) return;
   const from = document.getElementById('tip-from')?.value || '11:00';
@@ -1025,22 +1002,21 @@ function autoLoadTipWorkers() {
   S.employees.forEach(emp => {
     const cur = _tipChecked[emp.id];
     if (autoIds.has(emp.id)) {
-      // Auto-select only if not manually removed (cur === false set after being auto)
+      // Auto-select unless user manually removed (cur===false after being auto)
       if (cur === undefined || cur === 'auto') _tipChecked[emp.id] = 'auto';
-      // cur === true  → manual add, keep
-      // cur === false → user explicitly removed, respect that
+      // cur===true  → manual add, keep
+      // cur===false → explicitly removed, respect
     } else {
-      if (cur === 'auto') _tipChecked[emp.id] = false;   // was auto, no longer on shift
+      if (cur === 'auto') _tipChecked[emp.id] = false;     // left the range
       else if (cur === undefined) _tipChecked[emp.id] = false;
     }
   });
 
   const note = document.getElementById('tip-auto-note');
-  if (note) {
-    note.textContent = autoW.length
-      ? `${autoW.length} auto-loaded from shift`
-      : (S.employees.length ? 'No scheduled workers for this time' : '');
-  }
+  if (note) note.textContent = autoW.length
+    ? `${autoW.length} auto-loaded from shift`
+    : (S.employees.length ? 'No scheduled workers for this time' : '');
+
   renderTipsList(); calcTips();
 }
 
@@ -1056,26 +1032,19 @@ function renderTips() {
 
 function renderTipsList() {
   const list = document.getElementById('tip-emp-list'); if (!list) return;
-  if (!S.employees.length) {
-    list.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:8px 0;">Add employees first</div>';
-    return;
-  }
+  if (!S.employees.length) { list.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:8px 0;">Add employees first</div>'; return; }
   list.innerHTML = S.employees.map(e => {
-    const on     = _tipChecked[e.id] === 'auto' || _tipChecked[e.id] === true;
+    const on = _tipChecked[e.id] === 'auto' || _tipChecked[e.id] === true;
     const isAuto = _tipChecked[e.id] === 'auto';
     return `<div class="tip-emp-row" onclick="toggleTip('${e.id}')">
-      <div class="tcheck${on ? ' on' : ''}">
-        ${on ? '<span style="color:#000;font-size:11px;font-weight:800;">✓</span>' : ''}
-      </div>
+      <div class="tcheck${on ? ' on' : ''}">${on ? '<span style="color:#000;font-size:11px;font-weight:800;">✓</span>' : ''}</div>
       <div class="av" style="width:32px;height:32px;font-size:13px;">${e.name[0]}</div>
-      <div style="flex:1;">
-        <div style="font-size:14px;font-weight:500;">${e.name}</div>
+      <div style="flex:1;"><div style="font-size:14px;font-weight:500;">${e.name}</div>
         <div style="display:flex;gap:6px;margin-top:3px;">
           <span class="badge b${e.role === 'Server' ? 's' : 'b'}">${e.role}</span>
           ${on && isAuto  ? '<span class="tc-badge tc-auto">on shift</span>'  : ''}
           ${on && !isAuto ? '<span class="tc-badge tc-added">added</span>'    : ''}
-        </div>
-      </div>
+        </div></div>
       <div style="text-align:right;">
         <div style="font-size:15px;font-weight:700;color:var(--amber);" id="ta-${e.id}">$0.00</div>
         <div style="font-size:11px;color:var(--muted);"                  id="tp-${e.id}">—</div>
@@ -1087,9 +1056,7 @@ function renderTipsList() {
 
 window.toggleTip = function (id) {
   const cur = _tipChecked[id];
-  if (cur === 'auto')    _tipChecked[id] = false;   // manually remove an auto worker
-  else if (cur === true) _tipChecked[id] = false;   // deselect manual add
-  else                   _tipChecked[id] = true;    // manually add
+  _tipChecked[id] = (cur === 'auto' || cur === true) ? false : true;
   renderTipsList();
 };
 
@@ -1098,90 +1065,57 @@ window.calcTips = function () {
   const sp    = parseFloat(document.getElementById('tip-pct-s')?.value)  || 0;
   const bp    = parseFloat(document.getElementById('tip-pct-b')?.value)  || 0;
   S.tipPcts.server = sp; S.tipPcts.busboy = bp;
-
   const sel  = S.employees.filter(e => _tipChecked[e.id] === 'auto' || _tipChecked[e.id] === true);
   const srvs = sel.filter(e => e.role === 'Server');
   const bbs  = sel.filter(e => e.role === 'Busboy');
-
-  // If only one role is selected, give them 100 %
   let asp = 0, abp = 0;
   if (srvs.length && bbs.length) { asp = sp; abp = bp; }
   else if (srvs.length) asp = 100;
   else if (bbs.length)  abp = 100;
-
   const spool = total * asp / 100, bpool = total * abp / 100;
   let summLines = '';
-
   S.employees.forEach(e => {
     const on = _tipChecked[e.id] === 'auto' || _tipChecked[e.id] === true;
     let amt = 0, pstr = '—';
     if (on) {
       if (e.role === 'Server' && srvs.length) { amt = spool / srvs.length; pstr = srvs.length === 1 ? '100%' : `${asp}%÷${srvs.length}`; }
-      if (e.role === 'Busboy' && bbs.length)  { amt = bpool / bbs.length;  pstr = bbs.length  === 1 ? '100%' : `${abp}%÷${bbs.length}`;  }
+      if (e.role === 'Busboy'  && bbs.length)  { amt = bpool / bbs.length;  pstr = bbs.length  === 1 ? '100%' : `${abp}%÷${bbs.length}`; }
     }
     const ae = document.getElementById('ta-' + e.id), pe = document.getElementById('tp-' + e.id);
     if (ae) ae.textContent = '$' + amt.toFixed(2);
     if (pe) pe.textContent = pstr;
-    if (on) summLines += `
-      <div style="display:flex;justify-content:space-between;font-size:13px;padding:5px 0;border-bottom:1px solid rgba(255,255,255,.05);">
-        <span style="color:var(--muted);">${e.name} <span style="font-size:11px;">(${e.role})</span></span>
-        <strong style="color:var(--green);">$${amt.toFixed(2)}</strong>
-      </div>`;
+    if (on) summLines += `<div style="display:flex;justify-content:space-between;font-size:13px;padding:5px 0;border-bottom:1px solid rgba(255,255,255,.05);"><span style="color:var(--muted);">${e.name} <span style="font-size:11px;">(${e.role})</span></span><strong style="color:var(--green);">$${amt.toFixed(2)}</strong></div>`;
   });
   const sumEl = document.getElementById('tip-summary'); if (!sumEl) return;
-  if (!total || !sel.length) {
-    sumEl.innerHTML = '<div style="color:var(--muted);font-size:13px;">Select employees and enter tip amount</div>';
-    return;
-  }
-  sumEl.innerHTML = summLines +
-    `<div style="display:flex;justify-content:space-between;font-size:15px;font-weight:700;margin-top:10px;">
-      <span>Total Distributed</span>
-      <span style="color:var(--green);">$${(spool + bpool).toFixed(2)}</span>
-    </div>`;
+  if (!total || !sel.length) { sumEl.innerHTML = '<div style="color:var(--muted);font-size:13px;">Select employees and enter tip amount</div>'; return; }
+  sumEl.innerHTML = summLines + `<div style="display:flex;justify-content:space-between;font-size:15px;font-weight:700;margin-top:10px;"><span>Total Distributed</span><span style="color:var(--green);">$${(spool+bpool).toFixed(2)}</span></div>`;
 };
 
 function renderSavedTips() {
-  const container = document.getElementById('saved-tips-list'); if (!container) return;
+  const c = document.getElementById('saved-tips-list'); if (!c) return;
   const dayTips = S.tips.filter(t => t.date === _tipDate).sort((a, b) => b.id - a.id);
-  if (!dayTips.length) {
-    container.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:8px 0;">No tips saved for this day yet</div>';
-    return;
-  }
-  container.innerHTML = dayTips.map(t => {
+  if (!dayTips.length) { c.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:8px 0;">No tips saved for this day yet</div>'; return; }
+  c.innerHTML = dayTips.map(t => {
     const recs = t.receivers.map(id => S.employees.find(e => e.id === id)?.name || '?').join(', ');
     const sel  = S.employees.filter(e => t.receivers.includes(e.id));
     const srvs = sel.filter(e => e.role === 'Server'), bbs = sel.filter(e => e.role === 'Busboy');
     let asp = 0, abp = 0;
     if (srvs.length && bbs.length) { asp = t.serverPct; abp = t.busboyPct; }
     else if (srvs.length) asp = 100; else if (bbs.length) abp = 100;
-    const spool = t.total * asp / 100, bpool = t.total * abp / 100;
+    const sp2 = t.total * asp / 100, bp2 = t.total * abp / 100;
     const lines = sel.map(e => {
-      let amt = 0;
-      if (e.role === 'Server' && srvs.length) amt = spool / srvs.length;
-      if (e.role === 'Busboy' && bbs.length)  amt = bpool / bbs.length;
-      return `<div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0;">
-        <span style="color:var(--muted);">${e.name}</span>
-        <span style="color:var(--green);">$${amt.toFixed(2)}</span>
-      </div>`;
+      const amt = e.role === 'Server' && srvs.length ? sp2 / srvs.length : e.role === 'Busboy' && bbs.length ? bp2 / bbs.length : 0;
+      return `<div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0;"><span style="color:var(--muted);">${e.name}</span><span style="color:var(--green);">$${amt.toFixed(2)}</span></div>`;
     }).join('');
-    return `<div class="saved-tip-entry">
-      <div class="saved-tip-header">
-        <div style="font-size:15px;font-weight:700;color:var(--amber);">$${t.total.toFixed(2)}</div>
-        <button class="saved-tip-del" onclick="deleteTip('${t.id}')">×</button>
-      </div>
-      <div class="saved-tip-names">${recs}</div>
-      ${lines}
-    </div>`;
+    return `<div class="saved-tip-entry"><div class="saved-tip-header"><div style="font-size:15px;font-weight:700;color:var(--amber);">$${t.total.toFixed(2)}</div><button class="saved-tip-del" onclick="deleteTip('${t.id}')">×</button></div><div class="saved-tip-names">${recs}</div>${lines}</div>`;
   }).join('');
 }
 
 window.saveTips = function () {
   const total = parseFloat(document.getElementById('tip-total').value) || 0;
-  if (total <= 0)  { toast('Enter a tip amount'); return; }
-  if (!_tipDate)   { toast('Select a date');      return; }
-  const receivers = S.employees
-    .filter(e => _tipChecked[e.id] === 'auto' || _tipChecked[e.id] === true)
-    .map(e => e.id);
+  if (total <= 0) { toast('Enter a tip amount'); return; }
+  if (!_tipDate)  { toast('Select a date');      return; }
+  const receivers = S.employees.filter(e => _tipChecked[e.id] === 'auto' || _tipChecked[e.id] === true).map(e => e.id);
   if (!receivers.length) { toast('Select at least one employee'); return; }
   const sp = parseFloat(document.getElementById('tip-pct-s').value) || 0;
   const bp = parseFloat(document.getElementById('tip-pct-b').value) || 0;
@@ -1210,29 +1144,20 @@ function renderSummary() {
     return;
   }
   list.innerHTML = S.employees.map(e => {
-    const h = parseFloat(empWeekH(e.id, off));
-    const w = empWages(e.id, off);
-    const t = empTips(e.id, off);
-    const c = w + t;
+    const h = parseFloat(empWeekH(e.id, off)), w = empWages(e.id, off), t = empTips(e.id, off), c = w + t;
     tw += w; tt += t; th += h;
     return `<div class="summary-emp-card">
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">
         <div class="av">${e.name[0]}</div>
-        <div>
-          <div style="font-weight:600;font-size:15px;">${e.name}</div>
-          <span class="badge b${e.role === 'Server' ? 's' : 'b'}">${e.role}</span>
-        </div>
+        <div><div style="font-weight:600;font-size:15px;">${e.name}</div><span class="badge b${e.role === 'Server' ? 's' : 'b'}">${e.role}</span></div>
         <div style="flex:1;"></div>
-        <div style="text-align:right;">
-          <div style="font-family:'Playfair Display',serif;font-size:20px;color:var(--amber);">$${c.toFixed(2)}</div>
-          <div style="font-size:11px;color:var(--muted);">Total</div>
-        </div>
+        <div style="text-align:right;"><div style="font-family:'Playfair Display',serif;font-size:20px;color:var(--amber);">$${c.toFixed(2)}</div><div style="font-size:11px;color:var(--muted);">Total</div></div>
       </div>
       <div class="sg">
-        <div class="ss"><div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;">Hours</div> <div style="font-size:18px;font-weight:700;color:var(--cream);margin-top:2px;">${h.toFixed(1)}h</div></div>
-        <div class="ss"><div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;">Wages</div> <div style="font-size:18px;font-weight:700;color:var(--amber);margin-top:2px;">$${w.toFixed(2)}</div></div>
-        <div class="ss"><div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;">Tips</div>  <div style="font-size:18px;font-weight:700;color:var(--green);margin-top:2px;">$${t.toFixed(2)}</div></div>
-        <div class="ss"><div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;">Rate</div>  <div style="font-size:18px;font-weight:700;color:var(--muted);margin-top:2px;">$${e.role === 'Server' ? S.rates.server : S.rates.busboy}/h</div></div>
+        <div class="ss"><div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;">Hours</div><div style="font-size:18px;font-weight:700;color:var(--cream);margin-top:2px;">${h.toFixed(1)}h</div></div>
+        <div class="ss"><div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;">Wages</div><div style="font-size:18px;font-weight:700;color:var(--amber);margin-top:2px;">$${w.toFixed(2)}</div></div>
+        <div class="ss"><div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;">Tips</div><div style="font-size:18px;font-weight:700;color:var(--green);margin-top:2px;">$${t.toFixed(2)}</div></div>
+        <div class="ss"><div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;">Rate</div><div style="font-size:18px;font-weight:700;color:var(--muted);margin-top:2px;">$${e.role === 'Server' ? S.rates.server : S.rates.busboy}/h</div></div>
       </div>
     </div>`;
   }).join('');
@@ -1257,98 +1182,56 @@ function renderHome() {
   document.getElementById('hp').textContent = '$' + w.toFixed(2);
   document.getElementById('hh').textContent = h.toFixed(1) + ' hours scheduled this week';
   const el = document.getElementById('hel');
-  if (!S.employees.length) {
-    el.innerHTML = '<div style="text-align:center;padding:20px;color:var(--muted);font-size:13px;">No employees added yet</div>';
-    return;
-  }
+  if (!S.employees.length) { el.innerHTML = '<div style="text-align:center;padding:20px;color:var(--muted);font-size:13px;">No employees added yet</div>'; return; }
   el.innerHTML = S.employees.map(e => `
     <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin:0 16px 8px;display:flex;align-items:center;gap:12px;">
       <div class="av">${e.name[0]}</div>
-      <div>
-        <div style="font-weight:600;font-size:14px;">${e.name}</div>
-        <div style="font-size:11px;color:var(--muted);">${e.role}</div>
-      </div>
-      <div style="margin-left:auto;text-align:right;">
-        <div style="font-size:13px;font-weight:600;color:var(--amber);">${empWeekH(e.id, S.weekOffset)}h</div>
-        <div style="font-size:11px;color:var(--muted);">$${empWages(e.id, S.weekOffset).toFixed(2)}</div>
-      </div>
+      <div><div style="font-weight:600;font-size:14px;">${e.name}</div><div style="font-size:11px;color:var(--muted);">${e.role}</div></div>
+      <div style="margin-left:auto;text-align:right;"><div style="font-size:13px;font-weight:600;color:var(--amber);">${empWeekH(e.id, S.weekOffset)}h</div><div style="font-size:11px;color:var(--muted);">$${empWages(e.id, S.weekOffset).toFixed(2)}</div></div>
     </div>`).join('');
 }
 
 // ════════════════════════════════════════════════════════════════
 //  NOTES
 // ════════════════════════════════════════════════════════════════
-window.openNotesModal = function () {
-  _notesDate = new Date().toISOString().split('T')[0];
-  renderNbStrip(); renderNb();
-  document.getElementById('notes-modal').classList.add('open');
-};
+window.openNotesModal = function () { _notesDate = new Date().toISOString().split('T')[0]; renderNbStrip(); renderNb(); document.getElementById('notes-modal').classList.add('open'); };
 function renderNbStrip() {
   const today = new Date(), days = [];
   for (let i = -3; i <= 6; i++) { const d = new Date(today); d.setDate(d.getDate() + i); days.push(d); }
   document.getElementById('nb-strip').innerHTML = days.map(d => {
     const k = d.toISOString().split('T')[0];
-    const l = d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-    return `<div class="nb-dpill${k === _notesDate ? ' sel' : ''}" onclick="selNbDate('${k}')">${l}</div>`;
+    return `<div class="nb-dpill${k === _notesDate ? ' sel' : ''}" onclick="selNbDate('${k}')">${d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</div>`;
   }).join('');
-  setTimeout(() => {
-    const s = document.querySelector('.nb-dpill.sel');
-    if (s) s.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' });
-  }, 50);
+  setTimeout(() => { const s = document.querySelector('.nb-dpill.sel'); if (s) s.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' }); }, 50);
 }
-window.selNbDate = function (k) { _notesDate = k; renderNbStrip(); renderNb(); };
+window.selNbDate = k => { _notesDate = k; renderNbStrip(); renderNb(); };
 function renderNb() {
   const d = new Date(_notesDate + 'T12:00:00');
-  document.getElementById('nb-date-lbl').textContent =
-    d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+  document.getElementById('nb-date-lbl').textContent = d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
   const notes = S.notes[_notesDate] || [];
-  document.getElementById('nb-lines').innerHTML = '<div class="nb-margin"></div>' +
-    notes.map((n, i) => `
-      <div class="note-line">
-        <div class="note-circle${n.done ? ' done' : ''}" onclick="toggleNote('${_notesDate}',${i})">
-          ${n.done ? '<span style="color:#fff;font-size:10px;font-weight:800;">✓</span>' : ''}
-        </div>
-        <input class="note-ti${n.done ? ' note-done' : ''}" value="${n.text.replace(/"/g, '&quot;')}"
-          onblur="updNote('${_notesDate}',${i},this.value)"
-          onkeydown="if(event.key==='Enter')this.blur();">
-        <button class="note-del" onclick="delNote('${_notesDate}',${i})">×</button>
-      </div>`).join('');
+  document.getElementById('nb-lines').innerHTML = '<div class="nb-margin"></div>' + notes.map((n, i) => `
+    <div class="note-line">
+      <div class="note-circle${n.done ? ' done' : ''}" onclick="toggleNote('${_notesDate}',${i})">${n.done ? '<span style="color:#fff;font-size:10px;font-weight:800;">✓</span>' : ''}</div>
+      <input class="note-ti${n.done ? ' note-done' : ''}" value="${n.text.replace(/"/g, '&quot;')}" onblur="updNote('${_notesDate}',${i},this.value)" onkeydown="if(event.key==='Enter')this.blur();">
+      <button class="note-del" onclick="delNote('${_notesDate}',${i})">×</button>
+    </div>`).join('');
 }
-window.addNote    = function () {
-  if (!S.notes[_notesDate]) S.notes[_notesDate] = [];
-  S.notes[_notesDate].push({ id: Date.now(), text: '', done: false });
-  save(); renderNb();
-  const ins = document.querySelectorAll('.note-ti');
-  if (ins.length) ins[ins.length - 1].focus();
-};
-window.toggleNote = function (k, i) { S.notes[k][i].done = !S.notes[k][i].done; save(); renderNb(); };
-window.updNote    = function (k, i, txt) {
-  if (!S.notes[k]) return;
-  S.notes[k][i].text = txt;
-  if (!txt.trim()) { S.notes[k].splice(i, 1); renderNb(); }
-  save();
-};
-window.delNote    = function (k, i) { S.notes[k].splice(i, 1); save(); renderNb(); };
+window.addNote    = function () { if (!S.notes[_notesDate]) S.notes[_notesDate] = []; S.notes[_notesDate].push({ id: Date.now(), text: '', done: false }); save(); renderNb(); const ins = document.querySelectorAll('.note-ti'); if (ins.length) ins[ins.length - 1].focus(); };
+window.toggleNote = (k, i) => { S.notes[k][i].done = !S.notes[k][i].done; save(); renderNb(); };
+window.updNote    = (k, i, txt) => { if (!S.notes[k]) return; S.notes[k][i].text = txt; if (!txt.trim()) { S.notes[k].splice(i, 1); renderNb(); } save(); };
+window.delNote    = (k, i) => { S.notes[k].splice(i, 1); save(); renderNb(); };
 
 // ════════════════════════════════════════════════════════════════
 //  HISTORY
 // ════════════════════════════════════════════════════════════════
 window.openHistory = function () {
   const list = document.getElementById('hist-list');
-  if (!S.tips.length) {
-    list.innerHTML = '<div style="color:var(--muted);text-align:center;padding:30px;">No tip history yet</div>';
-  } else {
-    const sorted = [...S.tips].sort((a, b) => new Date(b.date) - new Date(a.date));
-    list.innerHTML = sorted.map(t => {
-      const d    = new Date(t.date + 'T12:00:00');
-      const ds   = d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+  if (!S.tips.length) { list.innerHTML = '<div style="color:var(--muted);text-align:center;padding:30px;">No tip history yet</div>'; }
+  else {
+    list.innerHTML = [...S.tips].sort((a, b) => new Date(b.date) - new Date(a.date)).map(t => {
+      const d = new Date(t.date + 'T12:00:00');
       const recs = t.receivers.map(id => S.employees.find(e => e.id === id)?.name || '?').join(', ');
-      return `<div class="hist-entry">
-        <div style="font-size:11px;color:var(--amber);font-weight:600;margin-bottom:6px;">${ds}</div>
-        <div style="font-size:13px;color:var(--muted);margin-bottom:2px;">Employees: ${recs}</div>
-        <div style="font-size:13px;color:var(--muted);">Split: Server ${t.serverPct}% / Busboy ${t.busboyPct}%</div>
-        <div style="font-size:15px;font-weight:700;color:var(--cream);margin-top:6px;">$${t.total.toFixed(2)}</div>
-      </div>`;
+      return `<div class="hist-entry"><div style="font-size:11px;color:var(--amber);font-weight:600;margin-bottom:6px;">${d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}</div><div style="font-size:13px;color:var(--muted);margin-bottom:2px;">Employees: ${recs}</div><div style="font-size:13px;color:var(--muted);">Split: Server ${t.serverPct}% / Busboy ${t.busboyPct}%</div><div style="font-size:15px;font-weight:700;color:var(--cream);margin-top:6px;">$${t.total.toFixed(2)}</div></div>`;
     }).join('');
   }
   document.getElementById('hist-modal').classList.add('open');
@@ -1359,47 +1242,34 @@ window.openHistory = function () {
 // ════════════════════════════════════════════════════════════════
 function renderSettings() {
   document.getElementById('cred-disp').textContent  = 'Username: ' + (_cu || '');
-  document.getElementById('rates-disp').textContent =
-    `Server $${S.rates.server}/hr · Busboy $${S.rates.busboy}/hr`;
+  document.getElementById('rates-disp').textContent = `Server $${S.rates.server}/hr · Busboy $${S.rates.busboy}/hr`;
 }
-window.openCredModal = function () {
-  document.getElementById('new-u').value  = _cu || '';
-  document.getElementById('new-p').value  = '';
-  document.getElementById('conf-p').value = '';
-  document.getElementById('cred-modal').classList.add('open');
-};
+window.openCredModal = function () { document.getElementById('new-u').value = _cu || ''; document.getElementById('new-p').value = ''; document.getElementById('conf-p').value = ''; document.getElementById('cred-modal').classList.add('open'); };
 window.saveCredentials = async function () {
   const u = document.getElementById('new-u').value.trim();
   const p = document.getElementById('new-p').value;
   const c = document.getElementById('conf-p').value;
   if (!u) { toast('Enter a username'); return; }
   if (p && p !== c) { toast('Passwords do not match'); return; }
-
   showLoader('Saving credentials…');
-  const oldAcct  = await getAccount(_cu || u);
-  const newPass  = p || oldAcct?.password || 'Ayvanagoodfood';
+  const old = await getAccount(_cu || u);
+  const newPass = p || old?.password || 'Ayvanagoodfood';
   const nameChanged = u.toLowerCase() !== (_cu || '').toLowerCase();
-
   if (nameChanged) {
-    // Create new account + migrate data to new blob path
     await upsertAccount(u, newPass);
     await pushUserData(u, S);
     cacheUserData(u, S);
   } else {
     await upsertAccount(u, newPass);
-    save();
+    await pushUserData(u, S);
   }
-  _cu = u;
-  saveSession(_cu);
-  hideLoader();
-  renderSettings(); closeM('cred-modal'); toast('Credentials saved ✓');
+  _cu = u; saveSession(_cu);
+  hideLoader(); renderSettings(); closeM('cred-modal'); toast('Credentials saved ✓');
 };
-
 window.clearData = function () {
-  showConfirm('Clear ALL data? This cannot be undone.', 'Clear All', '#EF4444', () => {
+  showConfirm('Clear ALL data? Cannot be undone.', 'Clear All', '#EF4444', () => {
     S = defData(); _tipChecked = {}; save();
-    renderHome(); renderEmployees(); renderSchedule(); renderTips(); renderSummary();
-    toast('Data cleared');
+    renderHome(); renderEmployees(); renderSchedule(); renderTips(); renderSummary(); toast('Data cleared');
   });
 };
 
@@ -1407,41 +1277,11 @@ window.clearData = function () {
 //  PWA ICON
 // ════════════════════════════════════════════════════════════════
 function setupPWAIcon() {
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
-    <defs>
-      <linearGradient id="mg" x1="0%" y1="0%" x2="100%" y2="100%">
-        <stop offset="0%"   style="stop-color:#1a1a1a"/>
-        <stop offset="40%"  style="stop-color:#2d2d2d"/>
-        <stop offset="100%" style="stop-color:#0a0a0a"/>
-      </linearGradient>
-      <linearGradient id="tg" x1="0%" y1="0%" x2="100%" y2="100%">
-        <stop offset="0%"   style="stop-color:#ffffff"/>
-        <stop offset="50%"  style="stop-color:#e8e0d5"/>
-        <stop offset="100%" style="stop-color:#c8c0b0"/>
-      </linearGradient>
-    </defs>
-    <rect width="512" height="512" rx="100" fill="url(#mg)"/>
-    <rect x="1" y="1" width="510" height="510" rx="99" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="2"/>
-    <text x="256" y="210" text-anchor="middle" font-family="Georgia,serif" font-style="italic" font-size="72"  fill="url(#tg)" letter-spacing="2">My</text>
-    <text x="256" y="330" text-anchor="middle" font-family="Georgia,serif" font-style="italic" font-size="88"  fill="url(#tg)" letter-spacing="1">Ayvana</text>
-    <text x="256" y="380" text-anchor="middle" font-family="Arial,sans-serif"                  font-size="22"  fill="rgba(245,158,11,0.7)" letter-spacing="6">RESTAURANT</text>
-  </svg>`;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512"><defs><linearGradient id="mg" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" style="stop-color:#1a1a1a"/><stop offset="40%" style="stop-color:#2d2d2d"/><stop offset="100%" style="stop-color:#0a0a0a"/></linearGradient><linearGradient id="tg" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" style="stop-color:#ffffff"/><stop offset="50%" style="stop-color:#e8e0d5"/><stop offset="100%" style="stop-color:#c8c0b0"/></linearGradient></defs><rect width="512" height="512" rx="100" fill="url(#mg)"/><rect x="1" y="1" width="510" height="510" rx="99" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="2"/><text x="256" y="210" text-anchor="middle" font-family="Georgia,serif" font-style="italic" font-size="72" fill="url(#tg)" letter-spacing="2">My</text><text x="256" y="330" text-anchor="middle" font-family="Georgia,serif" font-style="italic" font-size="88" fill="url(#tg)" letter-spacing="1">Ayvana</text><text x="256" y="380" text-anchor="middle" font-family="Arial,sans-serif" font-size="22" fill="rgba(245,158,11,0.7)" letter-spacing="6">RESTAURANT</text></svg>`;
   const enc = 'data:image/svg+xml;base64,' + btoa(svg);
   document.getElementById('favicon-svg').href = enc;
-  const img = new Image();
-  img.onload = function () {
-    const cv = document.createElement('canvas'); cv.width = 180; cv.height = 180;
-    cv.getContext('2d').drawImage(img, 0, 0, 180, 180);
-    document.getElementById('pwa-icon').href = cv.toDataURL('image/png');
-  };
-  img.src = enc;
-  const manifest = {
-    name: 'My Ayvana', short_name: 'MyAyvana', start_url: '.', display: 'standalone',
-    background_color: '#0F1117', theme_color: '#0F1117',
-    icons: [{ src: enc, sizes: '512x512', type: 'image/svg+xml' }],
-  };
-  document.getElementById('pwa-manifest').href =
-    URL.createObjectURL(new Blob([JSON.stringify(manifest)], { type: 'application/json' }));
+  const img = new Image(); img.onload = function () { const cv = document.createElement('canvas'); cv.width = 180; cv.height = 180; cv.getContext('2d').drawImage(img, 0, 0, 180, 180); document.getElementById('pwa-icon').href = cv.toDataURL('image/png'); }; img.src = enc;
+  document.getElementById('pwa-manifest').href = URL.createObjectURL(new Blob([JSON.stringify({ name: 'My Ayvana', short_name: 'MyAyvana', start_url: '.', display: 'standalone', background_color: '#0F1117', theme_color: '#0F1117' })], { type: 'application/json' }));
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -1449,30 +1289,28 @@ function setupPWAIcon() {
 // ════════════════════════════════════════════════════════════════
 window.closeM = closeM;
 
-function _initAfterLogin() {
+function _initScreens() {
   const today = new Date();
   _schedDay   = today.getDay() === 0 ? 6 : today.getDay() - 1;
   _tipDate    = today.toISOString().split('T')[0];
   _tipChecked = {};
-  renderHome(); renderEmployees(); renderSchedule(); renderTips(); renderSummary(); renderSettings();
-}
-
-// Ensure Ali/Ayvanagoodfood exists as the default account (only on first ever visit)
-async function bootstrapDefaultAccount() {
-  const existing = await getAccount('Ali');
-  if (!existing) await upsertAccount('Ali', 'Ayvanagoodfood');
+  renderHome(); renderEmployees(); renderSchedule();
+  renderTips(); renderSummary(); renderSettings();
 }
 
 function _wireEvents() {
   document.getElementById('lp')?.addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
   document.getElementById('lu')?.addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('lp')?.focus(); });
-  document.querySelectorAll('.mo').forEach(o =>
-    o.addEventListener('click', e => { if (e.target === o) o.classList.remove('open'); })
-  );
-  // Extra saves on page lifecycle events
+  document.querySelectorAll('.mo').forEach(o => o.addEventListener('click', e => { if (e.target === o) o.classList.remove('open'); }));
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') save(); });
   window.addEventListener('pagehide',     () => save());
   window.addEventListener('beforeunload', () => save());
+}
+
+// Ensure Ali / Ayvanagoodfood exists (only creates if absent)
+async function ensureDefaultAccount() {
+  const existing = await getAccount('Ali');
+  if (!existing) await upsertAccount('Ali', 'Ayvanagoodfood');
 }
 
 window.onload = async function () {
@@ -1480,10 +1318,9 @@ window.onload = async function () {
   _wireEvents();
   showLoader('Starting…');
 
-  // Bootstrap default account (no-op if already exists)
-  await bootstrapDefaultAccount();
+  await ensureDefaultAccount();
 
-  // Try to restore previous session
+  // Auto-restore previous session
   const sess = loadSession();
   if (sess?.username) {
     const acct = await getAccount(sess.username);
@@ -1492,22 +1329,18 @@ window.onload = async function () {
       _cu = acct.username;
       const stored = await loadUserData(_cu);
       S = stored ? Object.assign(defData(), stored) : defData();
-      _eid = 1;
-      S.employees.forEach(e => {
-        const n = parseInt((e.id || '').replace('e', ''));
-        if (!isNaN(n) && n >= _eid) _eid = n + 1;
-      });
+      _rebuildEid();
       saveSession(_cu);
       hideLoader();
       document.getElementById('login-screen').style.display = 'none';
       document.getElementById('app').classList.add('visible');
-      _initAfterLogin();
+      _initScreens();
       return;
     }
   }
 
   hideLoader();
-  // Stay on login screen
+  // Show login screen
 };
 
 })(); // end IIFE
