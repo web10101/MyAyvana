@@ -247,9 +247,13 @@ body{height:100%;background:#0F1117!important;color:#EEE9E3;font-family:'DM Sans
       </div>
       <div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:14px;scrollbar-width:none;" id="tip-date-strip"></div>
       <div style="display:flex;align-items:center;gap:10px;">
-        <div style="flex:1;"><div class="fl">From</div><input class="fi" id="tip-from" type="time" value="11:00" onchange="onTipTimeChange()"></div>
+        <div style="flex:1;"><div class="fl">From</div><input class="fi" id="tip-from" type="time" value="11:00"></div>
         <div style="color:var(--muted);font-size:18px;margin-top:16px;">–</div>
-        <div style="flex:1;"><div class="fl">To</div><input class="fi" id="tip-to" type="time" value="23:00" onchange="onTipTimeChange()"></div>
+        <div style="flex:1;"><div class="fl">To</div><input class="fi" id="tip-to" type="time" value="23:00"></div>
+      </div>
+      <button onclick="manualLoadTipWorkers()" style="width:100%;margin-top:12px;background:var(--amber);color:#000;border:none;border-radius:10px;padding:12px;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:600;cursor:pointer;">⬇ Load Team from Schedule</button>
+      <div id="tip-auto-note" style="font-size:11px;color:var(--amber);text-align:center;margin-top:8px;"></div>
+      <div style="display:none"><!-- placeholder --></div
       </div>
     </div>
 
@@ -264,9 +268,8 @@ body{height:100%;background:#0F1117!important;color:#EEE9E3;font-family:'DM Sans
 
     <!-- receivers -->
     <div class="card" style="margin-bottom:10px;">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+      <div style="margin-bottom:10px;">
         <div style="font-size:11px;color:var(--muted);letter-spacing:1px;">TIP RECEIVERS</div>
-        <div style="font-size:11px;color:var(--amber);" id="tip-auto-note"></div>
       </div>
       <div id="tip-emp-list"></div>
     </div>
@@ -290,7 +293,6 @@ body{height:100%;background:#0F1117!important;color:#EEE9E3;font-family:'DM Sans
   <div class="screen" id="screen-summary">
     <div class="ph" style="display:flex;align-items:center;justify-content:space-between;">
       <div><div class="pt">Summary</div><div class="ps">Payroll & earnings report</div></div>
-      <button class="gbtn" onclick="openHistory()">📋 History</button>
     </div>
     <div style="display:flex;align-items:center;justify-content:space-between;padding:0 16px;margin-bottom:12px;">
       <button class="wn-btn" onclick="changeWeek(-1)">‹</button>
@@ -384,15 +386,6 @@ body{height:100%;background:#0F1117!important;color:#EEE9E3;font-family:'DM Sans
   </div>
 </div>
 
-<div class="mo" id="hist-modal">
-  <div class="ms">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
-      <div class="mt" style="margin:0;">📋 Tip History</div>
-      <button class="gbtn" style="padding:6px 12px;" onclick="closeM('hist-modal')">Close</button>
-    </div>
-    <div id="hist-list"></div>
-  </div>
-</div>
 
 <div class="mo" id="cred-modal">
   <div class="ms">
@@ -438,7 +431,7 @@ body{height:100%;background:#0F1117!important;color:#EEE9E3;font-family:'DM Sans
 //                         on every keystroke save so UI doesn't stall)
 // ════════════════════════════════════════════════════════════════
 
-const API = '/api/data';
+const API = '/api/data'; // Edge Config backend
 
 // ── localStorage helpers ──────────────────────────────────────────
 function lsSet(k, v)  { try { localStorage.setItem(k, JSON.stringify(v)); } catch (_) {} }
@@ -491,7 +484,8 @@ async function getAccount(username) {
 
 async function upsertAccount(username, password) {
   const a = await loadAccounts();
-  a[username.toLowerCase()] = { username, password };
+  const h = await hashPassword(password);
+  a[username.toLowerCase()] = { username, passwordHash: h };
   await saveAccounts(a);
 }
 
@@ -625,7 +619,16 @@ window.confirmCancel = function () { closeM('confirm-modal'); _confirmCb = null;
 //  AUTH
 // ════════════════════════════════════════════════════════════════
 // Built-in default credentials — always work even if blob is empty
-const DEFAULT_ACCOUNTS = { ali: { username: 'Ali', password: 'Ayvanagoodfood' } };
+// Password hashing using Web Crypto API (SHA-256)
+// Passwords are never stored in plain text — only hashes are saved
+async function hashPassword(password) {
+  const enc = new TextEncoder();
+  const buf = await crypto.subtle.digest('SHA-256', enc.encode(password));
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+// Pre-hashed default: SHA-256 of "Ayvanagoodfood"
+const DEFAULT_ACCOUNTS = { ali: { username: 'Ali', passwordHash: 'cda073dc81c9f6dee3bae7282b8b819eee2fd1c0bdeb8cd74e922fcc3ece50b7' } };
 
 window.doLogin = async function () {
   const u = document.getElementById('lu').value.trim();
@@ -636,17 +639,22 @@ window.doLogin = async function () {
 
   // Try blob first, fall back to built-in defaults
   let acct = await getAccount(u);
+  const h = await hashPassword(p);
+
   if (!acct) {
-    // Blob may be empty — check against built-in defaults
-    const fallback = DEFAULT_ACCOUNTS[u.toLowerCase()];
-    if (fallback && fallback.password === p) {
-      // Save this account to blob so it persists going forward
-      await upsertAccount(fallback.username, fallback.password);
-      acct = fallback;
+    // Edge Config may be empty on first use — check built-in default
+    const def = DEFAULT_ACCOUNTS[u.toLowerCase()];
+    if (def && def.username === (u.charAt(0).toUpperCase() + u.slice(1).toLowerCase())) {
+      // Verify against default: hash of "Ayvanagoodfood"
+      const defaultHash = await hashPassword('Ayvanagoodfood');
+      if (h === defaultHash) {
+        await upsertAccount(def.username, p);
+        acct = await getAccount(u) || { username: def.username, passwordHash: h };
+      }
     }
   }
 
-  if (acct && acct.password === p) {
+  if (acct && acct.passwordHash === h) {
     showLoader('Loading your data…');
     _cu = acct.username;
     const stored = await loadUserData(_cu);
@@ -947,13 +955,11 @@ window.copySchedule = function () {
     else {
       workers.forEach(emp => {
         const sh = S.schedules[wk][emp.id][dk];
-        lines.push(`  • ${emp.name}  ${sh.start}–${sh.end}  (${sh.hours.toFixed(1)}h)`);
+        lines.push(`  • ${emp.name}  ${sh.start}–${sh.end}`);
       });
-      lines.push(`  Total: ${workers.reduce((s, emp) => s + (S.schedules[wk][emp.id][dk]?.hours || 0), 0).toFixed(1)} hrs`);
     }
   });
-  const totH = S.employees.reduce((s, e) => s + parseFloat(empWeekH(e.id, off)), 0);
-  lines.push('', '─'.repeat(30), `Total weekly hours: ${totH.toFixed(1)} hrs`);
+  lines.push('');
   const text = lines.join('\n');
   const btn = document.getElementById('copy-btn');
   function ok() { btn.textContent = '✅ Copied!'; btn.style.background = 'rgba(16,185,129,.25)'; setTimeout(() => { btn.textContent = '📋 Copy Schedule as Text'; btn.style.background = ''; }, 2500); }
@@ -1001,9 +1007,16 @@ function buildTipDateStrip() {
 window.selTipDate = function (k) {
   S.employees.forEach(e => { if (_tipChecked[e.id] === 'auto') _tipChecked[e.id] = false; });
   _tipDate = k;
-  buildTipDateStrip(); updateTipHeader(); autoLoadTipWorkers(); renderSavedTips();
+  buildTipDateStrip(); updateTipHeader(); renderTipsList(); renderSavedTips();
 };
-window.onTipTimeChange = function () { updateTipHeader(); autoLoadTipWorkers(); };
+window.onTipTimeChange = function () { updateTipHeader(); };
+window.manualLoadTipWorkers = function () {
+  updateTipHeader();
+  autoLoadTipWorkers();
+  // Visual feedback
+  const note = document.getElementById('tip-auto-note');
+  if (note && !note.textContent) note.textContent = 'No scheduled workers found for this time';
+};
 
 // Auto-select workers from saved schedule based on time range
 function autoLoadTipWorkers() {
@@ -1040,7 +1053,7 @@ function renderTips() {
   if (ps) ps.value = S.tipPcts.server; if (pb) pb.value = S.tipPcts.busboy;
   const tt = document.getElementById('tip-total'); if (tt) tt.value = 0;
   S.employees.forEach(e => { if (_tipChecked[e.id] === undefined) _tipChecked[e.id] = false; });
-  autoLoadTipWorkers();
+  renderTipsList();
   renderSavedTips();
 }
 
@@ -1238,18 +1251,6 @@ window.delNote    = (k, i) => { S.notes[k].splice(i, 1); save(); renderNb(); };
 // ════════════════════════════════════════════════════════════════
 //  HISTORY
 // ════════════════════════════════════════════════════════════════
-window.openHistory = function () {
-  const list = document.getElementById('hist-list');
-  if (!S.tips.length) { list.innerHTML = '<div style="color:var(--muted);text-align:center;padding:30px;">No tip history yet</div>'; }
-  else {
-    list.innerHTML = [...S.tips].sort((a, b) => new Date(b.date) - new Date(a.date)).map(t => {
-      const d = new Date(t.date + 'T12:00:00');
-      const recs = t.receivers.map(id => S.employees.find(e => e.id === id)?.name || '?').join(', ');
-      return `<div class="hist-entry"><div style="font-size:11px;color:var(--amber);font-weight:600;margin-bottom:6px;">${d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}</div><div style="font-size:13px;color:var(--muted);margin-bottom:2px;">Employees: ${recs}</div><div style="font-size:13px;color:var(--muted);">Split: Server ${t.serverPct}% / Busboy ${t.busboyPct}%</div><div style="font-size:15px;font-weight:700;color:var(--cream);margin-top:6px;">$${t.total.toFixed(2)}</div></div>`;
-    }).join('');
-  }
-  document.getElementById('hist-modal').classList.add('open');
-};
 
 // ════════════════════════════════════════════════════════════════
 //  SETTINGS
@@ -1267,15 +1268,29 @@ window.saveCredentials = async function () {
   if (p && p !== c) { toast('Passwords do not match'); return; }
   showLoader('Saving credentials…');
   const old = await getAccount(_cu || u);
-  const newPass = p || old?.password || 'Ayvanagoodfood';
+  // If no new password entered, we need to keep existing — but we only store hashes
+  // so we require re-entry; if blank, keep old hash by passing a sentinel
+  const newPass = p || null;
+  if (!newPass && !old) { toast('Please enter a password'); hideLoader(); return; }
   const nameChanged = u.toLowerCase() !== (_cu || '').toLowerCase();
-  if (nameChanged) {
-    await upsertAccount(u, newPass);
-    await pushUserData(u, S);
-    cacheUserData(u, S);
+  if (newPass) {
+    if (nameChanged) {
+      await upsertAccount(u, newPass);
+      await pushUserData(u, S);
+      cacheUserData(u, S);
+    } else {
+      await upsertAccount(u, newPass);
+      await pushUserData(u, S);
+    }
   } else {
-    await upsertAccount(u, newPass);
-    await pushUserData(u, S);
+    // No password change — just update username if changed
+    if (nameChanged && old) {
+      const a = await loadAccounts();
+      a[u.toLowerCase()] = { username: u, passwordHash: old.passwordHash };
+      await saveAccounts(a);
+      await pushUserData(u, S);
+      cacheUserData(u, S);
+    }
   }
   _cu = u; saveSession(_cu);
   hideLoader(); renderSettings(); closeM('cred-modal'); toast('Credentials saved ✓');
