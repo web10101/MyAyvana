@@ -624,13 +624,27 @@ window.confirmCancel = function () { closeM('confirm-modal'); _confirmCb = null;
 // ════════════════════════════════════════════════════════════════
 //  AUTH
 // ════════════════════════════════════════════════════════════════
+// Built-in default credentials — always work even if blob is empty
+const DEFAULT_ACCOUNTS = { ali: { username: 'Ali', password: 'Ayvanagoodfood' } };
+
 window.doLogin = async function () {
   const u = document.getElementById('lu').value.trim();
   const p = document.getElementById('lp').value;
   if (!u || !p) { document.getElementById('lerr').textContent = 'Enter username and password.'; return; }
 
   showLoader('Signing in…');
-  const acct = await getAccount(u);
+
+  // Try blob first, fall back to built-in defaults
+  let acct = await getAccount(u);
+  if (!acct) {
+    // Blob may be empty — check against built-in defaults
+    const fallback = DEFAULT_ACCOUNTS[u.toLowerCase()];
+    if (fallback && fallback.password === p) {
+      // Save this account to blob so it persists going forward
+      await upsertAccount(fallback.username, fallback.password);
+      acct = fallback;
+    }
+  }
 
   if (acct && acct.password === p) {
     showLoader('Loading your data…');
