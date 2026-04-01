@@ -499,12 +499,23 @@ function lsUserKey(u) { return 'av5_u_' + u.toLowerCase(); }
 async function loadUserData(username) {
   const fromBlob = await apiGET({ action: 'getUser', user: username });
   if (fromBlob !== null) { 
-    lsSet(lsUserKey(username), fromBlob); 
-    // If we're already logged in as this user, update the live state
-    if (_cu && _cu.toLowerCase() === username.toLowerCase()) {
-      S = Object.assign(defData(), fromBlob);
-      _rebuildEid();
-      _initScreens();
+    const local = lsGet(lsUserKey(username));
+    
+    // CONFLICT RESOLUTION: Only update if remote data is newer than local
+    // or if local doesn't exist.
+    if (!local || (fromBlob._ts && fromBlob._ts > (local._ts || 0))) {
+      lsSet(lsUserKey(username), fromBlob); 
+      
+      // Update live state if logged in
+      if (_cu && _cu.toLowerCase() === username.toLowerCase()) {
+        // Only update if remote is newer than current live state
+        if (fromBlob._ts > (S._ts || 0)) {
+          S = Object.assign(defData(), fromBlob);
+          _rebuildEid();
+          _initScreens();
+          // toast('Data updated from cloud ✓');
+        }
+      }
     }
     return fromBlob; 
   }
@@ -530,6 +541,7 @@ function defData() {
     rates:   { server: 15, busboy: 12 },
     tipPcts: { server: 70, busboy: 30 },
     weekOffset: 0,
+    _ts: Date.now(), // Track when this data was last updated
   };
 }
 
@@ -544,8 +556,10 @@ let _cu = null;          // current username (canonical casing from accounts sto
 //   - Blob push is async fire-and-forget → no UI stall
 function save() {
   if (!_cu) return;
+  // Update timestamp before saving
+  S._ts = Date.now();
   cacheUserData(_cu, S);
-  pushUserData(_cu, S);  // fire-and-forget intentional
+  pushUserData(_cu, S);
 }
 
 let _eid = 1, _editId = null, _shiftEid = null, _shiftDk = null,
