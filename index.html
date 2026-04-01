@@ -161,7 +161,27 @@ body{height:100%;background:#0F1117!important;color:#EEE9E3;font-family:'DM Sans
     <label class="lbl">Password</label>
     <input class="linput" id="lp" type="password" placeholder="Enter password">
     <button class="lbtn" onclick="doLogin()">Sign In</button>
+    <div style="text-align:center;margin-top:12px;">
+      <button style="background:none;border:none;color:var(--amber);font-size:13px;cursor:pointer;text-decoration:underline;" onclick="openForgotModal()">Forgot Password?</button>
+    </div>
     <div class="lerr" id="lerr"></div>
+  </div>
+</div>
+
+<!-- FORGOT PASSWORD MODAL -->
+<div class="mo" id="forgot-modal">
+  <div class="ms">
+    <div class="mt">Reset Password</div>
+    <div id="forgot-step1">
+      <div class="fg"><div class="fl">Username</div><input class="fi" id="f-u" placeholder="Enter username"></div>
+      <div class="ma"><button class="gbtn" onclick="closeM('forgot-modal')">Cancel</button><button class="abtn" onclick="sendResetCode()">Send Code</button></div>
+    </div>
+    <div id="forgot-step2" style="display:none;">
+      <div style="font-size:13px;color:var(--muted);margin-bottom:15px;">A code was sent to your registered phone number.</div>
+      <div class="fg"><div class="fl">Verification Code</div><input class="fi" id="f-code" placeholder="Enter code"></div>
+      <div class="fg"><div class="fl">New Password</div><input class="fi" id="f-new-p" type="password" placeholder="New Password"></div>
+      <div class="ma"><button class="gbtn" onclick="closeM('forgot-modal')">Cancel</button><button class="abtn" onclick="verifyAndReset()">Reset Password</button></div>
+    </div>
   </div>
 </div>
 
@@ -394,6 +414,7 @@ body{height:100%;background:#0F1117!important;color:#EEE9E3;font-family:'DM Sans
   <div class="ms">
     <div class="mt">Change Credentials</div>
     <div class="fg"><div class="fl">New Username</div><input class="fi" id="new-u" placeholder="Username"></div>
+    <div class="fg"><div class="fl">Phone Number (for recovery)</div><input class="fi" id="new-phone" placeholder="e.g. 1234567890"></div>
     <div class="fg"><div class="fl">New Password</div><input class="fi" id="new-p" type="password" placeholder="Password"></div>
     <div class="fg"><div class="fl">Confirm Password</div><input class="fi" id="conf-p" type="password" placeholder="Confirm"></div>
     <div class="ma"><button class="gbtn" onclick="closeM('cred-modal')">Cancel</button><button class="abtn" onclick="saveCredentials()">Save</button></div>
@@ -864,19 +885,22 @@ function workersInRange(dateStr, from, to) {
   const tgt = new Date(dateStr + 'T12:00:00');
   const di  = tgt.getDay() === 0 ? 6 : tgt.getDay() - 1;
   const dk  = DKS[di];
-  // Search up to ±52 weeks to find the right schedule week
-  for (let off = -52; off <= 52; off++) {
-    const ws = wkStart(off), we = new Date(ws); we.setDate(we.getDate() + 6);
-    if (tgt >= ws && tgt <= we) {
-      const b  = S.schedules[wkKey(off)] || {};
-      const fm = t2m(from), tm = t2m(to);
-      return S.employees.filter(emp => {
-        const sh = b[emp.id]?.[dk];
-        return sh && t2m(sh.start) < tm && t2m(sh.end) > fm;
-      });
-    }
-  }
-  return [];
+  const fm = t2m(from), tm = t2m(to);
+  
+  // Find the specific week offset for this date
+  const today = new Date();
+  today.setHours(0,0,0,0);
+  const diffTime = tgt.getTime() - wkStart(0).getTime();
+  const off = Math.floor(diffTime / (7 * 24 * 60 * 60 * 1000));
+  
+  const b = S.schedules[wkKey(off)] || {};
+  return S.employees.filter(emp => {
+    const sh = b[emp.id]?.[dk];
+    if (!sh) return false;
+    const sfm = t2m(sh.start), stm = t2m(sh.end);
+    // Overlap logic: (StartA < EndB) and (EndA > StartB)
+    return sfm < tm && stm > fm;
+  });
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -1048,17 +1072,18 @@ window.selTipDate = function (k) {
   _tipDate = k;
   buildTipDateStrip(); updateTipHeader(); renderTipsList(); renderSavedTips();
 };
-window.onTipTimeChange = function () { updateTipHeader(); };
+window.onTipTimeChange = function () { 
+  updateTipHeader();
+  autoLoadTipWorkers(false); // Update auto-selections in real-time as time changes
+};
 window.manualLoadTipWorkers = function () {
   updateTipHeader();
-  autoLoadTipWorkers();
-  // Visual feedback
-  const note = document.getElementById('tip-auto-note');
-  if (note && !note.textContent) note.textContent = 'No scheduled workers found for this time';
+  autoLoadTipWorkers(true); // true means force selection
+  toast('Schedule loaded ✓');
 };
 
 // Auto-select workers from saved schedule based on time range
-function autoLoadTipWorkers() {
+function autoLoadTipWorkers(force = false) {
   if (!_tipDate || !S.employees.length) return;
   const from = document.getElementById('tip-from')?.value || '11:00';
   const to   = document.getElementById('tip-to')?.value   || '23:00';
@@ -1066,21 +1091,27 @@ function autoLoadTipWorkers() {
   const autoIds = new Set(autoW.map(e => e.id));
 
   S.employees.forEach(emp => {
-    const cur = _tipChecked[emp.id];
     if (autoIds.has(emp.id)) {
-      // Auto-select unless user manually removed (cur===false after being auto)
-      if (cur === undefined || cur === 'auto') _tipChecked[emp.id] = 'auto';
-      // cur===true  → manual add, keep
-      // cur===false → explicitly removed, respect
+      // If forced (button click), always mark as 'auto' (selected)
+      if (force) {
+        _tipChecked[emp.id] = 'auto';
+      } else {
+        // Background sync: only auto-select if not already interacted with
+        if (_tipChecked[emp.id] === undefined) {
+          _tipChecked[emp.id] = 'auto';
+        }
+      }
     } else {
-      if (cur === 'auto') _tipChecked[emp.id] = false;     // left the range
-      else if (cur === undefined) _tipChecked[emp.id] = false;
+      // If they are not in range, and were 'auto', unselect them
+      if (_tipChecked[emp.id] === 'auto') {
+        _tipChecked[emp.id] = false;
+      }
     }
   });
 
   const note = document.getElementById('tip-auto-note');
   if (note) note.textContent = autoW.length
-    ? `${autoW.length} auto-loaded from shift`
+    ? `${autoW.length} workers in shift range`
     : (S.employees.length ? 'No scheduled workers for this time' : '');
 
   renderTipsList(); calcTips();
@@ -1298,9 +1329,17 @@ function renderSettings() {
   document.getElementById('cred-disp').textContent  = 'Username: ' + (_cu || '');
   document.getElementById('rates-disp').textContent = `Server $${S.rates.server}/hr · Busboy $${S.rates.busboy}/hr`;
 }
-window.openCredModal = function () { document.getElementById('new-u').value = _cu || ''; document.getElementById('new-p').value = ''; document.getElementById('conf-p').value = ''; document.getElementById('cred-modal').classList.add('open'); };
+window.openCredModal = async function () { 
+  const acct = await getAccount(_cu);
+  document.getElementById('new-u').value = _cu || ''; 
+  document.getElementById('new-phone').value = acct?.phone || '';
+  document.getElementById('new-p').value = ''; 
+  document.getElementById('conf-p').value = ''; 
+  document.getElementById('cred-modal').classList.add('open'); 
+};
 window.saveCredentials = async function () {
   const u = document.getElementById('new-u').value.trim();
+  const ph = document.getElementById('new-phone').value.trim();
   const p = document.getElementById('new-p').value;
   const cp = document.getElementById('conf-p').value;
   if (!u) return toast('Username required');
@@ -1310,27 +1349,61 @@ window.saveCredentials = async function () {
   const old = await getAccount(_cu);
   const nameChanged = u.toLowerCase() !== _cu.toLowerCase();
 
+  const a = await loadAccounts();
   if (nameChanged) {
     const taken = await getAccount(u);
     if (taken) { hideLoader(); return toast('Username already taken'); }
-    const a = await loadAccounts();
     delete a[_cu.toLowerCase()];
-    if (!p && old) {
-      a[u.toLowerCase()] = { username: u, passwordHash: old.passwordHash };
-    }
-    await saveAccounts(a);
   }
 
-  if (p) {
-    await upsertAccount(u, p);
+  const h = p ? await hashPassword(p) : old.passwordHash;
+  a[u.toLowerCase()] = { username: u, passwordHash: h, phone: ph };
+  await saveAccounts(a);
+
+  if (nameChanged || p) {
     await pushUserData(u, S);
-  } else if (nameChanged && old) {
-    await pushUserData(u, S);
-    cacheUserData(u, S);
   }
   
   _cu = u; saveSession(_cu);
   hideLoader(); renderSettings(); closeM('cred-modal'); toast('Credentials saved ✓');
+};
+
+// Forgot Password Logic
+let _resetCode = null, _resetUser = null;
+window.openForgotModal = () => {
+  document.getElementById('f-u').value = '';
+  document.getElementById('forgot-step1').style.display = 'block';
+  document.getElementById('forgot-step2').style.display = 'none';
+  document.getElementById('forgot-modal').classList.add('open');
+};
+window.sendResetCode = async function() {
+  const u = document.getElementById('f-u').value.trim();
+  if (!u) return toast('Enter username');
+  showLoader('Checking account…');
+  const acct = await getAccount(u);
+  if (!acct || !acct.phone) {
+    hideLoader();
+    return toast(acct ? 'No phone number registered' : 'Account not found');
+  }
+  _resetCode = Math.floor(100000 + Math.random() * 900000).toString();
+  _resetUser = acct.username;
+  // In a real app, you'd call an SMS API here. For now, we'll toast it.
+  console.log('SMS Code for ' + acct.phone + ': ' + _resetCode);
+  toast('Code sent to ' + acct.phone.slice(-4).padStart(acct.phone.length, '*'));
+  document.getElementById('forgot-step1').style.display = 'none';
+  document.getElementById('forgot-step2').style.display = 'block';
+  hideLoader();
+};
+window.verifyAndReset = async function() {
+  const code = document.getElementById('f-code').value.trim();
+  const pass = document.getElementById('f-new-p').value;
+  if (code !== _resetCode) return toast('Invalid code');
+  if (pass.length < 4) return toast('Password too short');
+  showLoader('Resetting password…');
+  await upsertAccount(_resetUser, pass);
+  hideLoader();
+  closeM('forgot-modal');
+  toast('Password reset successful! Please login.');
 };
 window.clearData = function () {
   showConfirm('Clear ALL data? Cannot be undone.', 'Clear All', '#EF4444', () => {
