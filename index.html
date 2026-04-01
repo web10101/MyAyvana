@@ -432,7 +432,7 @@ body{height:100%;background:#0F1117!important;color:#EEE9E3;font-family:'DM Sans
 //                         on every keystroke save so UI doesn't stall)
 // ════════════════════════════════════════════════════════════════
 
-const API = '/api/data'; // Edge Config backend
+const API = '/api/data'; // Vercel KV backend
 
 // ── localStorage helpers ──────────────────────────────────────────
 function lsSet(k, v)  { try { localStorage.setItem(k, JSON.stringify(v)); } catch (_) {} }
@@ -464,7 +464,7 @@ async function apiPOST(body) {
   } catch (e) { console.error('[apiPOST]', e.message); return false; }
 }
 
-// ── Accounts  →  ayvana/accounts.json ────────────────────────────
+// ── Accounts  →  Vercel KV ayvana_accounts ───────────────────────
 async function loadAccounts() {
   // Blob first (authoritative), localStorage as fallback
   const fromBlob = await apiGET({ action: 'getAccounts' });
@@ -490,7 +490,7 @@ async function upsertAccount(username, password) {
   await saveAccounts(a);
 }
 
-// ── Per-user data  →  ayvana/users/user-<name>.json ────────────────
+// ── Per-user data  →  Vercel KV user_<name> ───────────────────────
 function lsUserKey(u) { return 'av5_u_' + u.toLowerCase(); }
 
 async function loadUserData(username) {
