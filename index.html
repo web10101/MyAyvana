@@ -499,7 +499,16 @@ function lsUserKey(u) { return 'av5_u_' + u.toLowerCase(); }
 
 async function loadUserData(username) {
   const fromBlob = await apiGET({ action: 'getUser', user: username });
-  if (fromBlob !== null) { lsSet(lsUserKey(username), fromBlob); return fromBlob; }
+  if (fromBlob !== null) { 
+    lsSet(lsUserKey(username), fromBlob); 
+    // If we're already logged in as this user, update the live state
+    if (_cu && _cu.toLowerCase() === username.toLowerCase()) {
+      S = Object.assign(defData(), fromBlob);
+      _rebuildEid();
+      _initScreens();
+    }
+    return fromBlob; 
+  }
   return lsGet(lsUserKey(username));
 }
 
@@ -670,6 +679,16 @@ window.doLogin = async function () {
     document.getElementById('login-screen').style.display = 'none';
     document.getElementById('app').classList.add('visible');
     _initScreens();
+    
+    // Start background polling for auto-sync every 30 seconds
+    if (!window._syncInterval) {
+      window._syncInterval = setInterval(async () => {
+        if (_cu && document.visibilityState === 'visible') {
+          await loadUserData(_cu);
+          await loadAccounts();
+        }
+      }, 30000);
+    }
   } else {
     hideLoader();
     document.getElementById('lerr').textContent = 'Incorrect username or password.';
@@ -1283,35 +1302,33 @@ window.openCredModal = function () { document.getElementById('new-u').value = _c
 window.saveCredentials = async function () {
   const u = document.getElementById('new-u').value.trim();
   const p = document.getElementById('new-p').value;
-  const c = document.getElementById('conf-p').value;
-  if (!u) { toast('Enter a username'); return; }
-  if (p && p !== c) { toast('Passwords do not match'); return; }
+  const cp = document.getElementById('conf-p').value;
+  if (!u) return toast('Username required');
+  if (p && p !== cp) return toast('Passwords do not match');
+
   showLoader('Saving credentials…');
-  const old = await getAccount(_cu || u);
-  // If no new password entered, we need to keep existing — but we only store hashes
-  // so we require re-entry; if blank, keep old hash by passing a sentinel
-  const newPass = p || null;
-  if (!newPass && !old) { toast('Please enter a password'); hideLoader(); return; }
-  const nameChanged = u.toLowerCase() !== (_cu || '').toLowerCase();
-  if (newPass) {
-    if (nameChanged) {
-      await upsertAccount(u, newPass);
-      await pushUserData(u, S);
-      cacheUserData(u, S);
-    } else {
-      await upsertAccount(u, newPass);
-      await pushUserData(u, S);
-    }
-  } else {
-    // No password change — just update username if changed
-    if (nameChanged && old) {
-      const a = await loadAccounts();
+  const old = await getAccount(_cu);
+  const nameChanged = u.toLowerCase() !== _cu.toLowerCase();
+
+  if (nameChanged) {
+    const taken = await getAccount(u);
+    if (taken) { hideLoader(); return toast('Username already taken'); }
+    const a = await loadAccounts();
+    delete a[_cu.toLowerCase()];
+    if (!p && old) {
       a[u.toLowerCase()] = { username: u, passwordHash: old.passwordHash };
-      await saveAccounts(a);
-      await pushUserData(u, S);
-      cacheUserData(u, S);
     }
+    await saveAccounts(a);
   }
+
+  if (p) {
+    await upsertAccount(u, p);
+    await pushUserData(u, S);
+  } else if (nameChanged && old) {
+    await pushUserData(u, S);
+    cacheUserData(u, S);
+  }
+  
   _cu = u; saveSession(_cu);
   hideLoader(); renderSettings(); closeM('cred-modal'); toast('Credentials saved ✓');
 };
@@ -1398,12 +1415,20 @@ window.onload = async function () {
       document.getElementById('login-screen').style.display = 'none';
       document.getElementById('app').classList.add('visible');
       _initScreens();
+      
+      // Start background polling for auto-sync every 30 seconds
+      setInterval(async () => {
+        if (_cu && document.visibilityState === 'visible') {
+          await loadUserData(_cu);
+          await loadAccounts(); // Sync credentials too
+        }
+      }, 30000);
+      
       return;
     }
   }
 
   hideLoader();
-  // Show login screen
 };
 
 })(); // end IIFE
