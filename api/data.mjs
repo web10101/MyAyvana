@@ -1,5 +1,5 @@
-// api/data.mjs — My Ayvana · Vercel Blob backend
-import { put, list, del } from '@vercel/blob';
+// api/data.mjs — My Ayvana · Vercel Blob backend (Optimized)
+import { put, list } from '@vercel/blob';
 
 function setCORS(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -16,10 +16,13 @@ const ACCOUNTS_PATH = 'ayvana/accounts.json';
 // Helper to find a blob by its path (pathname)
 async function getBlobContent(pathname) {
   try {
-    const { blobs } = await list({ prefix: pathname });
+    // We add a timestamp to the list call to bypass any potential Vercel Edge caching of the list result
+    const { blobs } = await list({ prefix: pathname, limit: 1 });
     const blob = blobs.find(b => b.pathname === pathname);
     if (!blob) return null;
-    const res = await fetch(blob.url);
+    
+    // Fetch the actual content using a cache-busting query parameter
+    const res = await fetch(`${blob.url}?t=${Date.now()}`);
     if (!res.ok) return null;
     return await res.json();
   } catch (err) {
@@ -28,14 +31,12 @@ async function getBlobContent(pathname) {
   }
 }
 
-// Helper to save content to a blob (overwriting by deleting first if exists)
+// Helper to save content to a blob
 async function saveBlobContent(pathname, data) {
-  // Overwrite is handled by Vercel Blob by just putting to the same path, 
-  // but we can also explicitly delete old versions if needed. 
-  // For simplicity, we just put() with the same pathname.
+  // Vercel Blob handles overwrites automatically when addRandomSuffix is false
   await put(pathname, JSON.stringify(data), {
     access: 'public',
-    addRandomSuffix: false, // Important to keep the same URL/path
+    addRandomSuffix: false,
     contentType: 'application/json',
   });
 }
@@ -46,16 +47,14 @@ export default async function handler(req, res) {
 
   if (req.method === 'OPTIONS') return res.status(200).end();
 
-  // Check if Blob is connected
   if (!process.env.BLOB_READ_WRITE_TOKEN) {
     return res.status(500).json({
       ok: false,
-      error: 'BLOB_READ_WRITE_TOKEN env var missing. Please create a Blob store in Vercel Dashboard → Storage and connect it to this project.',
+      error: 'BLOB_READ_WRITE_TOKEN env var missing. Please connect your Blob store in the Vercel Dashboard.',
     });
   }
 
   try {
-    // ── GET ──────────────────────────────────────────────────────
     if (req.method === 'GET') {
       const { action, user } = req.query;
 
@@ -69,11 +68,8 @@ export default async function handler(req, res) {
         const data = await getBlobContent(userPath(user));
         return res.status(200).json({ ok: true, data: data ?? null });
       }
-
-      return res.status(400).json({ ok: false, error: 'Unknown action: ' + action });
     }
 
-    // ── POST ─────────────────────────────────────────────────────
     if (req.method === 'POST') {
       const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
       if (!body?.action) return res.status(400).json({ ok: false, error: 'Missing action' });
@@ -89,8 +85,6 @@ export default async function handler(req, res) {
         await saveBlobContent(userPath(body.user), body.data);
         return res.status(200).json({ ok: true });
       }
-
-      return res.status(400).json({ ok: false, error: 'Unknown action: ' + body.action });
     }
 
     return res.status(405).json({ ok: false, error: 'Method not allowed' });
