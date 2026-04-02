@@ -83,8 +83,8 @@ body{height:100%;background:#0F1117!important;color:#EEE9E3;font-family:'DM Sans
 .dpill-d{font-size:18px;font-weight:700;color:var(--cream);}
 .dpill-c{font-size:10px;color:var(--amber);margin-top:1px;}
 .dpill.active .dpill-c{color:rgba(0,0,0,.6);}
-.shift-card{background:var(--card);border:1px solid rgba(245,158,11,.2);border-radius:14px;padding:14px 16px;margin:0 16px 8px;display:flex;align-items:center;gap:12px;}
-.add-member-card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px 16px;margin:0 16px 8px;display:flex;align-items:center;gap:12px;cursor:pointer;transition:border-color .18s;}
+.shift-card{background:var(--card);border:1px solid rgba(245,158,11,.2);border-radius:14px;padding:14px 16px;margin:0 16px 8px;display:flex;align-items:center;gap:12px;overflow:hidden;}
+.add-member-card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px 16px;margin:0 16px 8px;display:flex;align-items:center;gap:12px;cursor:pointer;transition:border-color .18s;overflow:hidden;}
 .add-member-card:hover{border-color:rgba(245,158,11,.4);}
 .sec-title{font-size:11px;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;padding:0 16px;margin-bottom:8px;}
 .tdrum{display:flex;flex-direction:column;align-items:center;background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden;}
@@ -934,10 +934,10 @@ function renderSchedContent() {
       const sh = S.schedules[wk][emp.id][dk];
       return `<div class="shift-card">
         <div class="av">${emp.name[0]}</div>
-        <div style="flex:1;"><div style="font-weight:600;font-size:14px;">${emp.name}</div>
+        <div style="flex:1;min-width:0;"><div style="font-weight:600;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${emp.name}</div>
           <div style="font-size:13px;color:var(--amber);font-weight:600;margin-top:2px;">${sh.start} – ${sh.end}</div>
           <div style="font-size:11px;color:var(--muted);">${sh.hours.toFixed(1)} hours</div></div>
-        <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end;">
+        <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end;flex-shrink:0;">
           <button style="background:rgba(255,255,255,.07);border:none;border-radius:8px;padding:5px 12px;font-size:12px;color:var(--cream);cursor:pointer;font-family:'DM Sans',sans-serif;" onclick="openShiftModal('${emp.id}','${dk}')">✏️ Edit</button>
           <button style="background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.25);border-radius:8px;padding:5px 12px;font-size:12px;color:var(--red);cursor:pointer;font-family:'DM Sans',sans-serif;" onclick="rmShift('${emp.id}',${off},'${dk}')">Remove</button>
         </div></div>`;
@@ -948,9 +948,9 @@ function renderSchedContent() {
     html += off_.map(emp => `
       <div class="add-member-card" onclick="openShiftModal('${emp.id}','${dk}')">
         <div class="av" style="background:rgba(255,255,255,.04);border-color:var(--border);color:var(--muted);">${emp.name[0]}</div>
-        <div style="flex:1;"><div style="font-weight:600;font-size:14px;">${emp.name}</div>
+        <div style="flex:1;min-width:0;"><div style="font-weight:600;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${emp.name}</div>
           <span class="badge b${emp.role === 'Server' ? 's' : 'b'}">${emp.role}</span></div>
-        <div style="color:var(--amber);font-size:22px;">+</div>
+        <div style="color:var(--amber);font-size:22px;flex-shrink:0;">+</div>
       </div>`).join('');
   }
   content.innerHTML = html;
