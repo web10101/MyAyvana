@@ -220,11 +220,13 @@ body{height:100%;background:#0F1117!important;color:#EEE9E3;font-family:'DM Sans
 
   <!-- SCHEDULE -->
   <div class="screen" id="screen-schedule">
-    <div class="ph" style="display:flex;align-items:center;justify-content:space-between;">
-      <div><div class="pt">Schedule</div><div class="ps" id="sw-lbl"></div></div>
-      <div style="display:flex;gap:8px;"><button class="wn-btn" onclick="changeWeek(-1)">‹</button><button class="wn-btn" onclick="changeWeek(1)">›</button></div>
+    <div style="position:sticky;top:0;z-index:5;background:#0F1117;">
+      <div class="ph" style="display:flex;align-items:center;justify-content:space-between;">
+        <div><div class="pt">Schedule</div><div class="ps" id="sw-lbl"></div></div>
+        <div style="display:flex;gap:8px;"><button class="wn-btn" onclick="changeWeek(-1)">‹</button><button class="wn-btn" onclick="changeWeek(1)">›</button></div>
+      </div>
+      <div class="day-pill-row" id="sched-pills"></div>
     </div>
-    <div class="day-pill-row" id="sched-pills"></div>
     <div id="sched-content"></div>
     <div style="display:flex;gap:10px;padding:0 16px 20px;margin-top:8px;">
       <button class="copy-btn" id="copy-btn" onclick="copySchedule()">📋 Copy Schedule as Text</button>
