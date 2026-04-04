@@ -1,5 +1,5 @@
 // api/data.mjs — My Ayvana · Vercel Blob backend (Optimized)
-import { put, list } from '@vercel/blob';
+import { put, list, del } from '@vercel/blob';
 
 function setCORS(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -83,6 +83,30 @@ export default async function handler(req, res) {
       if (body.action === 'saveUser') {
         if (!body.user || !body.data) return res.status(400).json({ ok: false, error: 'user and data required' });
         await saveBlobContent(userPath(body.user), body.data);
+        return res.status(200).json({ ok: true });
+      }
+
+      if (body.action === 'submitEmployeeTip') {
+        if (!body.adminUser || !body.tip) return res.status(400).json({ ok: false, error: 'adminUser and tip required' });
+        const adminData = await getBlobContent(userPath(body.adminUser));
+        if (!adminData) return res.status(404).json({ ok: false, error: 'Admin data not found' });
+        if (!Array.isArray(adminData.tips)) adminData.tips = [];
+        adminData.tips.push(body.tip);
+        adminData._ts = Date.now();
+        await saveBlobContent(userPath(body.adminUser), adminData);
+        return res.status(200).json({ ok: true });
+      }
+
+      if (body.action === 'deleteUserAccount') {
+        if (!body.username) return res.status(400).json({ ok: false, error: 'username required' });
+        const accts = await getBlobContent(ACCOUNTS_PATH) ?? {};
+        delete accts[body.username.toLowerCase()];
+        await saveBlobContent(ACCOUNTS_PATH, accts);
+        // Delete the user's data blob if it exists
+        const path = userPath(body.username);
+        const { blobs } = await list({ prefix: path, limit: 1 });
+        const blob = blobs.find(b => b.pathname === path);
+        if (blob) await del(blob.url);
         return res.status(200).json({ ok: true });
       }
     }
