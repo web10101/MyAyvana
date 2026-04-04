@@ -235,6 +235,7 @@ body{height:100%;background:#0F1117!important;color:#EEE9E3;font-family:'DM Sans
 
   <!-- TIPS -->
   <div class="screen" id="screen-tips">
+  <div id="admin-tips-view">
     <div class="ph"><div class="pt">Tips</div><div class="ps">Distribute daily tips</div></div>
 
     <!-- unified date + time card -->
@@ -293,6 +294,25 @@ body{height:100%;background:#0F1117!important;color:#EEE9E3;font-family:'DM Sans
     </div>
   </div>
 
+  <div id="emp-tips-view" style="display:none;">
+    <div class="ph"><div class="pt">My Tips</div><div class="ps" id="emp-tip-user-label"></div></div>
+    <div class="card" style="margin-bottom:10px;padding:16px;">
+      <div style="font-size:11px;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:3px;">Date</div>
+      <div style="font-size:17px;font-weight:700;color:var(--cream);margin-bottom:12px;" id="emp-tip-date-display">—</div>
+      <div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:8px;scrollbar-width:none;" id="emp-tip-date-strip"></div>
+    </div>
+    <div class="card" style="margin-bottom:10px;">
+      <div class="fg"><div class="fl">Tip Amount ($)</div><input class="fi" id="emp-tip-amount" type="number" value="" min="0" step="1" placeholder="0.00"></div>
+      <button class="abtn" style="width:100%;padding:14px;" onclick="submitEmployeeTip()">Submit Tip</button>
+    </div>
+    <div style="margin:0 16px 20px;">
+      <div style="font-size:11px;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:10px;">MY PAST SUBMISSIONS</div>
+      <div id="emp-tips-history"></div>
+    </div>
+  </div>
+
+  </div>
+
   <!-- SUMMARY -->
   <div class="screen" id="screen-summary">
     <div class="ph" style="display:flex;align-items:center;justify-content:space-between;">
@@ -322,10 +342,12 @@ body{height:100%;background:#0F1117!important;color:#EEE9E3;font-family:'DM Sans
     <div class="set-sec">
       <div class="set-item" onclick="openCredModal()"><div style="font-size:20px;width:36px;text-align:center;">🔑</div><div style="flex:1;"><div style="font-size:14px;font-weight:500;">Change Credentials</div><div style="font-size:12px;color:var(--muted);margin-top:2px;" id="cred-disp">Username: Ali</div></div><div style="color:var(--muted);">›</div></div>
     </div>
+    <div id="settings-data-section">
     <div style="font-size:11px;color:var(--muted);padding:8px 20px 8px;letter-spacing:1.5px;text-transform:uppercase;">Data</div>
     <div class="set-sec">
       <div class="set-item" onclick="switchTab('employees')"><div style="font-size:20px;width:36px;text-align:center;">💵</div><div style="flex:1;"><div style="font-size:14px;font-weight:500;">Hourly Rates</div><div style="font-size:12px;color:var(--muted);margin-top:2px;" id="rates-disp">Server $15 / Busboy $12</div></div><div style="color:var(--muted);">›</div></div>
       <div class="set-item" onclick="clearData()"><div style="font-size:20px;width:36px;text-align:center;">🗑️</div><div style="flex:1;"><div style="font-size:14px;font-weight:500;color:var(--red);">Clear All Data</div><div style="font-size:12px;color:var(--muted);margin-top:2px;">Reset app to defaults</div></div></div>
+    </div>
     </div>
     <div style="padding:0 16px 20px;">
       <button class="dbtn" style="width:100%; padding:14px; font-size:15px;" onclick="doLogout()">Sign Out</button>
@@ -489,10 +511,10 @@ async function getAccount(username) {
   return a[username.toLowerCase()] ?? null;
 }
 
-async function upsertAccount(username, password) {
+async function upsertAccount(username, password, extraFields = {}) {
   const a = await loadAccounts();
-  const h = await hashPassword(password);
-  a[username.toLowerCase()] = { username, passwordHash: h };
+  const h = password ? await hashPassword(password) : null;
+  a[username.toLowerCase()] = { username, passwordHash: h, ...extraFields };
   await saveAccounts(a);
 }
 
@@ -558,6 +580,8 @@ function defData() {
 // ════════════════════════════════════════════════════════════════
 let S   = defData();
 let _cu = null;          // current username (canonical casing from accounts store)
+let _role = 'Admin';     // 'Admin' | 'Server' | 'Busboy'
+let _adminUser = null;   // admin's username (for employee tip submission)
 
 // Write-through save: localStorage is immediate; remote push is debounced 1.5 s
 function _setSyncDot(state) { // 'ok' | 'pending' | 'error'
@@ -570,7 +594,7 @@ function _setSyncDot(state) { // 'ok' | 'pending' | 'error'
 }
 let _saveTimer = null;
 function save() {
-  if (!_cu) return;
+  if (!_cu || _role !== 'Admin') return;
   S._ts = Date.now();
   cacheUserData(_cu, S);
   _setSyncDot('pending');
@@ -680,22 +704,28 @@ window.doLogin = async function () {
   const u = document.getElementById('lu').value.trim();
   const p = document.getElementById('lp').value;
   if (!u || !p) { document.getElementById('lerr').textContent = 'Enter username and password.'; return; }
-
   showLoader('Signing in…');
-
-  // Try blob first, fall back to built-in defaults
-  let acct = await getAccount(u);
   const h = await hashPassword(p);
+  let allAccts = await loadAccounts();
+  let acct = allAccts[u.toLowerCase()] ?? null;
 
+  // First login: set permanent password
+  if (acct && acct.firstLogin && !acct.passwordHash) {
+    acct.passwordHash = h;
+    acct.firstLogin = false;
+    allAccts[u.toLowerCase()] = acct;
+    await saveAccounts(allAccts);
+  }
+
+  // Built-in Ali default fallback
   if (!acct) {
-    // Edge Config may be empty on first use — check built-in default
     const def = DEFAULT_ACCOUNTS[u.toLowerCase()];
-    if (def && def.username === (u.charAt(0).toUpperCase() + u.slice(1).toLowerCase())) {
-      // Verify against default: hash of "Ayvanagoodfood"
+    if (def) {
       const defaultHash = await hashPassword('Ayvanagoodfood');
       if (h === defaultHash) {
-        await upsertAccount(def.username, p);
-        acct = await getAccount(u) || { username: def.username, passwordHash: h };
+        allAccts[u.toLowerCase()] = { username: def.username, passwordHash: h, role: 'Admin', firstLogin: false };
+        await saveAccounts(allAccts);
+        acct = allAccts[u.toLowerCase()];
       }
     }
   }
@@ -703,7 +733,15 @@ window.doLogin = async function () {
   if (acct && acct.passwordHash === h) {
     showLoader('Loading your data…');
     _cu = acct.username;
-    const stored = await loadUserData(_cu);
+    _role = acct.role || 'Admin';
+    let stored;
+    if (_role === 'Admin') {
+      stored = await loadUserData(_cu);
+    } else {
+      const adminAcct = Object.values(allAccts).find(a => a.role === 'Admin');
+      _adminUser = adminAcct?.username || 'Ali';
+      stored = await loadUserData(_adminUser);
+    }
     S = stored ? Object.assign(defData(), stored) : defData();
     _rebuildEid();
     saveSession(_cu);
@@ -711,16 +749,19 @@ window.doLogin = async function () {
     document.getElementById('login-screen').style.display = 'none';
     document.getElementById('app').classList.add('visible');
     _initScreens();
-    
-    // Start background polling for auto-sync every 30 seconds
-    if (!window._syncInterval) {
-      window._syncInterval = setInterval(async () => {
-        if (_cu && document.visibilityState === 'visible') {
-          await loadUserData(_cu);
-          await loadAccounts();
+    if (window._syncInterval) clearInterval(window._syncInterval);
+    window._syncInterval = setInterval(async () => {
+      if (!_cu || document.visibilityState !== 'visible') return;
+      const target = _role === 'Admin' ? _cu : _adminUser;
+      const fresh = await loadUserData(target);
+      if (fresh && fresh._ts > (S._ts || 0)) {
+        S = Object.assign(defData(), fresh);
+        if (_role !== 'Admin') {
+          if (document.getElementById('screen-tips')?.classList.contains('active')) renderEmpTipsView();
         }
-      }, 30000);
-    }
+      }
+      await loadAccounts();
+    }, 30000);
   } else {
     hideLoader();
     document.getElementById('lerr').textContent = 'Incorrect username or password.';
@@ -734,9 +775,21 @@ window.doLogin = async function () {
 window.doLogout = function () {
   showConfirm('Sign out of My Ayvana?', 'Sign Out', '#EF4444', async () => {
     showLoader('Saving…');
-    if (_cu) await pushUserData(_cu, S);   // ensure final save reaches Blob
+    if (_cu && _role === 'Admin') await pushUserData(_cu, S);
     hideLoader();
-    clearSession(); _cu = null; S = defData(); _tipChecked = {};
+    if (window._syncInterval) { clearInterval(window._syncInterval); window._syncInterval = null; }
+    clearSession(); _cu = null; _role = 'Admin'; _adminUser = null; S = defData(); _tipChecked = {};
+    ['home','employees','schedule','summary'].forEach(t => {
+      const el = document.getElementById('tab-' + t);
+      if (el) el.style.display = '';
+    });
+    document.getElementById('admin-tips-view').style.display = '';
+    document.getElementById('emp-tips-view').style.display = 'none';
+    document.getElementById('settings-data-section').style.display = '';
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+    document.getElementById('screen-home').classList.add('active');
+    document.querySelectorAll('.tab-item').forEach(t => t.classList.remove('active'));
+    document.getElementById('tab-home').classList.add('active');
     document.getElementById('app').classList.remove('visible');
     document.getElementById('login-screen').style.display = 'flex';
     document.getElementById('lp').value = '';
@@ -756,6 +809,7 @@ function _rebuildEid() {
 //  TABS
 // ════════════════════════════════════════════════════════════════
 window.switchTab = function (name) {
+  if (_role !== 'Admin' && !['tips','settings'].includes(name)) return;
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.querySelectorAll('.tab-item').forEach(t => t.classList.remove('active'));
   document.getElementById('screen-' + name).classList.add('active');
@@ -790,19 +844,33 @@ window.saveEmployee = function () {
   if (_editId) {
     const e = S.employees.find(x => x.id === _editId);
     if (e) { e.name = name; e.role = role; }
+    save(); closeM('emp-modal'); renderEmployees(); renderHome();
+    toast('Updated ✓');
   } else {
     S.employees.push({ id: 'e' + (_eid++), name, role });
+    save(); closeM('emp-modal'); renderEmployees(); renderHome();
+    toast('Employee added ✓');
+    (async () => {
+      const a = await loadAccounts();
+      if (!a[name.toLowerCase()]) {
+        a[name.toLowerCase()] = { username: name, passwordHash: null, role, firstLogin: true };
+        await saveAccounts(a);
+      }
+    })();
   }
-  save(); closeM('emp-modal'); renderEmployees(); renderHome();
-  toast(_editId ? 'Updated ✓' : 'Employee added ✓');
 };
 
 window.removeEmp = function (id) {
   const e = S.employees.find(x => x.id === id);
-  showConfirm(`Remove ${e ? e.name : 'employee'}?`, 'Remove', '#EF4444', () => {
-    S.employees = S.employees.filter(x => x.id !== id);
-    save(); renderEmployees(); renderHome(); toast('Employee removed');
-  });
+  showConfirm(
+    `Remove ${e ? e.name : 'employee'}? This will also delete their login account.`,
+    'Remove', '#EF4444',
+    async () => {
+      S.employees = S.employees.filter(x => x.id !== id);
+      save(); renderEmployees(); renderHome(); toast('Employee removed');
+      if (e) await apiPOST({ action: 'deleteUserAccount', username: e.name });
+    }
+  );
 };
 
 window.saveRates = function () {
@@ -866,7 +934,7 @@ function empTips(eid, off) {
   let tot = 0;
   S.tips.forEach(t => {
     const d = new Date(t.date + 'T12:00:00');
-    if (d >= s && d <= en && t.receivers.includes(eid)) {
+    if (d >= s && d <= en && t.receivers && t.receivers.includes(eid)) {
       const emp = S.employees.find(e => e.id === eid); if (!emp) return;
       const rr = t.receivers.filter(r => {
         const e2 = S.employees.find(x => x.id === r); return e2 && e2.role === emp.role;
@@ -1116,6 +1184,14 @@ function autoLoadTipWorkers(force = false) {
 }
 
 function renderTips() {
+  if (_role !== 'Admin') {
+    document.getElementById('admin-tips-view').style.display = 'none';
+    document.getElementById('emp-tips-view').style.display = '';
+    renderEmpTipsView();
+    return;
+  }
+  document.getElementById('admin-tips-view').style.display = '';
+  document.getElementById('emp-tips-view').style.display = 'none';
   buildTipDateStrip(); updateTipHeader();
   const ps = document.getElementById('tip-pct-s'), pb = document.getElementById('tip-pct-b');
   if (ps) ps.value = S.tipPcts.server; if (pb) pb.value = S.tipPcts.busboy;
@@ -1124,6 +1200,53 @@ function renderTips() {
   renderTipsList();
   renderSavedTips();
 }
+
+function renderEmpTipsView() {
+  const el = document.getElementById('emp-tip-user-label');
+  if (el) el.textContent = _cu || '';
+  if (!_tipDate) _tipDate = new Date().toISOString().split('T')[0];
+  const dd = document.getElementById('emp-tip-date-display');
+  if (dd) dd.textContent = fmtTipDate(_tipDate);
+  // Build date strip
+  const today = new Date(), days = [];
+  for (let i = -3; i <= 6; i++) { const d = new Date(today); d.setDate(d.getDate() + i); days.push(d); }
+  const strip = document.getElementById('emp-tip-date-strip');
+  if (strip) strip.innerHTML = days.map(d => {
+    const k = d.toISOString().split('T')[0], active = k === _tipDate;
+    return `<div style="flex-shrink:0;display:flex;flex-direction:column;align-items:center;padding:9px 13px;border-radius:12px;cursor:pointer;min-width:52px;border:1px solid ${active ? 'var(--amber)' : 'var(--border)'};background:${active ? 'var(--amber)' : 'var(--card2)'};" onclick="selEmpTipDate('${k}')">
+      <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:${active ? '#000' : 'var(--muted)'};">${d.toLocaleDateString('en-US',{weekday:'short'})}</div>
+      <div style="font-size:17px;font-weight:700;color:${active ? '#000' : 'var(--cream)'};">${d.getDate()}</div>
+    </div>`;
+  }).join('');
+  // My past submissions
+  const myTips = (S.tips || []).filter(t => t.submittedBy === _cu).sort((a,b) => b.id - a.id);
+  const hist = document.getElementById('emp-tips-history');
+  if (hist) hist.innerHTML = myTips.length
+    ? myTips.map(t => `<div style="background:var(--card2);border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;">
+        <div style="font-size:12px;color:var(--muted);">${fmtTipDate(t.date)}</div>
+        <div style="font-size:15px;font-weight:700;color:var(--amber);">$${(t.amount ?? t.total ?? 0).toFixed(2)}</div>
+      </div>`).join('')
+    : '<div style="color:var(--muted);font-size:13px;padding:8px 0;">No tips submitted yet</div>';
+}
+window.selEmpTipDate = function(k) { _tipDate = k; renderEmpTipsView(); };
+window.submitEmployeeTip = async function() {
+  const amount = parseFloat(document.getElementById('emp-tip-amount')?.value) || 0;
+  if (amount <= 0) { toast('Enter a tip amount'); return; }
+  if (!_tipDate) { toast('Select a date'); return; }
+  const tip = { id: Date.now(), date: _tipDate, amount, submittedBy: _cu, role: _role, timestamp: new Date().toISOString() };
+  showLoader('Submitting…');
+  const ok = await apiPOST({ action: 'submitEmployeeTip', adminUser: _adminUser, tip });
+  hideLoader();
+  if (ok) {
+    toast('Tip submitted ✓');
+    const el = document.getElementById('emp-tip-amount'); if (el) el.value = '';
+    const fresh = await loadUserData(_adminUser);
+    if (fresh) { S = Object.assign(defData(), fresh); }
+    renderEmpTipsView();
+  } else {
+    toast('Failed to submit — try again');
+  }
+};
 
 function renderTipsList() {
   const list = document.getElementById('tip-emp-list'); if (!list) return;
@@ -1191,8 +1314,8 @@ function renderSavedTips() {
   const dayTips = S.tips.filter(t => t.date === _tipDate).sort((a, b) => b.id - a.id);
   if (!dayTips.length) { c.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:8px 0;">No tips saved for this day yet</div>'; return; }
   c.innerHTML = dayTips.map(t => {
-    const recs = t.receivers.map(id => S.employees.find(e => e.id === id)?.name || '?').join(', ');
-    const sel  = S.employees.filter(e => t.receivers.includes(e.id));
+    const recs = (t.receivers || []).map(id => S.employees.find(e => e.id === id)?.name || '?').join(', ');
+    const sel  = S.employees.filter(e => t.receivers && t.receivers.includes(e.id));
     const srvs = sel.filter(e => e.role === 'Server'), bbs = sel.filter(e => e.role === 'Busboy');
     let asp = 0, abp = 0;
     if (srvs.length && bbs.length) { asp = t.serverPct; abp = t.busboyPct; }
@@ -1202,7 +1325,7 @@ function renderSavedTips() {
       const amt = e.role === 'Server' && srvs.length ? sp2 / srvs.length : e.role === 'Busboy' && bbs.length ? bp2 / bbs.length : 0;
       return `<div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0;"><span style="color:var(--muted);">${e.name}</span><span style="color:var(--green);">$${amt.toFixed(2)}</span></div>`;
     }).join('');
-    return `<div class="saved-tip-entry"><div class="saved-tip-header"><div style="font-size:15px;font-weight:700;color:var(--amber);">$${t.total.toFixed(2)}</div><button class="saved-tip-del" onclick="deleteTip('${t.id}')">×</button></div><div class="saved-tip-names">${recs}</div>${lines}</div>`;
+    return `<div class="saved-tip-entry"><div class="saved-tip-header"><div style="font-size:15px;font-weight:700;color:var(--amber);">$${(t.total ?? t.amount ?? 0).toFixed(2)}</div><button class="saved-tip-del" onclick="deleteTip('${t.id}')">×</button></div><div class="saved-tip-names">${recs}</div>${lines}${t.submittedBy ? `<div style="font-size:11px;color:var(--amber);margin-top:4px;">Added by ${t.submittedBy}</div>` : ''}</div>`;
   }).join('');
 }
 
@@ -1214,7 +1337,7 @@ window.saveTips = function () {
   if (!receivers.length) { toast('Select at least one employee'); return; }
   const sp = parseFloat(document.getElementById('tip-pct-s').value) || 0;
   const bp = parseFloat(document.getElementById('tip-pct-b').value) || 0;
-  S.tips.push({ id: Date.now(), date: _tipDate, total, receivers, serverPct: sp, busboyPct: bp });
+  S.tips.push({ id: Date.now(), date: _tipDate, total, receivers, serverPct: sp, busboyPct: bp, submittedBy: _cu, timestamp: new Date().toISOString() });
   save();
   toast('Tip entry saved ✓');
   document.getElementById('tip-total').value = 0;
@@ -1326,6 +1449,8 @@ window.delNote    = (k, i) => { S.notes[k].splice(i, 1); save(); renderNb(); };
 function renderSettings() {
   document.getElementById('cred-disp').textContent  = 'Username: ' + (_cu || '');
   document.getElementById('rates-disp').textContent = `Server $${S.rates.server}/hr · Busboy $${S.rates.busboy}/hr`;
+  const ds = document.getElementById('settings-data-section');
+  if (ds) ds.style.display = _role === 'Admin' ? '' : 'none';
 }
 window.openCredModal = async function () { 
   const acct = await getAccount(_cu);
@@ -1353,13 +1478,21 @@ window.saveCredentials = async function () {
   }
 
   const h = p ? await hashPassword(p) : old.passwordHash;
-  a[u.toLowerCase()] = { username: u, passwordHash: h };
+  a[u.toLowerCase()] = { username: u, passwordHash: h, role: old?.role || _role, firstLogin: false };
   await saveAccounts(a);
 
-  if (nameChanged || p) {
+  if (_role !== 'Admin' && nameChanged && _adminUser) {
+    const adminData = await loadUserData(_adminUser);
+    if (adminData) {
+      const emp = adminData.employees?.find(e => e.name.toLowerCase() === _cu.toLowerCase());
+      if (emp) { emp.name = u; adminData._ts = Date.now(); await pushUserData(_adminUser, adminData); S = Object.assign(defData(), adminData); }
+    }
+  }
+
+  if (_role === 'Admin' && (nameChanged || p)) {
     await pushUserData(u, S);
   }
-  
+
   _cu = u; saveSession(_cu);
   hideLoader(); renderSettings(); closeM('cred-modal'); toast('Credentials saved ✓');
 };
@@ -1406,8 +1539,18 @@ function _initScreens() {
   _schedDay   = today.getDay() === 0 ? 6 : today.getDay() - 1;
   _tipDate    = today.toISOString().split('T')[0];
   _tipChecked = {};
-  renderHome(); renderEmployees(); renderSchedule();
-  renderTips(); renderSummary(); renderSettings();
+  const adminOnly = ['home','employees','schedule','summary'];
+  adminOnly.forEach(t => {
+    const el = document.getElementById('tab-' + t);
+    if (el) el.style.display = _role === 'Admin' ? '' : 'none';
+  });
+  if (_role === 'Admin') {
+    renderHome(); renderEmployees(); renderSchedule(); renderSummary();
+    switchTab('home');
+  } else {
+    switchTab('tips');
+  }
+  renderTips(); renderSettings();
 }
 
 function _wireEvents() {
@@ -1418,8 +1561,16 @@ function _wireEvents() {
     if (document.visibilityState === 'hidden') {
       save();
     } else if (_cu) {
-      const fresh = await loadUserData(_cu);
-      if (fresh && fresh._ts > (S._ts || 0)) { S = Object.assign(defData(), fresh); _initScreens(); }
+      const target = _role === 'Admin' ? _cu : (_adminUser || 'Ali');
+      const fresh = await loadUserData(target);
+      if (fresh && fresh._ts > (S._ts || 0)) {
+        S = Object.assign(defData(), fresh);
+        if (_role === 'Admin') {
+          _initScreens();
+        } else {
+          if (document.getElementById('screen-tips')?.classList.contains('active')) renderEmpTipsView();
+        }
+      }
     }
   });
   function _beaconSave() {
@@ -1435,10 +1586,17 @@ function _wireEvents() {
 
 // Ensure Ali / Ayvanagoodfood exists (only creates if absent)
 async function ensureDefaultAccount() {
-  if (lsGet('av5_defaultAcct')) return;
   const existing = await getAccount('Ali');
-  if (!existing) await upsertAccount('Ali', 'Ayvanagoodfood');
-  lsSet('av5_defaultAcct', true);
+  if (!existing) {
+    const h = await hashPassword('Ayvanagoodfood');
+    const a = await loadAccounts();
+    a['ali'] = { username: 'Ali', passwordHash: h, role: 'Admin', firstLogin: false };
+    await saveAccounts(a);
+  } else if (!existing.role) {
+    const a = await loadAccounts();
+    a['ali'] = { ...existing, role: 'Admin', firstLogin: false };
+    await saveAccounts(a);
+  }
 }
 
 window.onload = async function () {
@@ -1455,7 +1613,13 @@ window.onload = async function () {
     if (acct) {
       showLoader('Loading your data…');
       _cu = acct.username;
-      const stored = await loadUserData(_cu);
+      _role = acct.role || 'Admin';
+      if (_role !== 'Admin') {
+        const allAccts2 = await loadAccounts();
+        const adminAcct = Object.values(allAccts2).find(a => a.role === 'Admin');
+        _adminUser = adminAcct?.username || 'Ali';
+      }
+      const stored = _role === 'Admin' ? await loadUserData(_cu) : await loadUserData(_adminUser || 'Ali');
       S = stored ? Object.assign(defData(), stored) : defData();
       _rebuildEid();
       saveSession(_cu);
@@ -1463,15 +1627,22 @@ window.onload = async function () {
       document.getElementById('login-screen').style.display = 'none';
       document.getElementById('app').classList.add('visible');
       _initScreens();
-      
+
       // Start background polling for auto-sync every 30 seconds
-      setInterval(async () => {
-        if (_cu && document.visibilityState === 'visible') {
-          await loadUserData(_cu);
-          await loadAccounts(); // Sync credentials too
+      if (window._syncInterval) clearInterval(window._syncInterval);
+      window._syncInterval = setInterval(async () => {
+        if (!_cu || document.visibilityState !== 'visible') return;
+        const target = _role === 'Admin' ? _cu : _adminUser;
+        const fresh = await loadUserData(target);
+        if (fresh && fresh._ts > (S._ts || 0)) {
+          S = Object.assign(defData(), fresh);
+          if (_role !== 'Admin') {
+            if (document.getElementById('screen-tips')?.classList.contains('active')) renderEmpTipsView();
+          }
         }
+        await loadAccounts();
       }, 30000);
-      
+
       return;
     }
   }
