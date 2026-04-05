@@ -875,7 +875,7 @@ function renderEmployees() {
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px;">
         <div class="av">${e.name[0].toUpperCase()}</div>
         <div style="flex:1;"><div style="font-weight:600;font-size:15px;">${e.name}</div>
-          <span class="badge b${e.role === 'Server' ? 's' : role === 'Admin' ? 'a' : 'b'}">${e.role}</span></div>
+          <span class="badge b${e.role === 'Server' ? 's' : e.role === 'Admin' ? 'a' : 'b'}">${e.role}</span></div>
         <div style="display:flex;gap:8px;">
           <button class="ibt" onclick="openEmpModal('${e.id}')">✏️</button>
           <button class="ibt" onclick="removeEmp('${e.id}')">🗑️</button>
@@ -1003,7 +1003,7 @@ function renderSchedContent() {
       <div class="add-member-card" onclick="openShiftModal('${emp.id}','${dk}')">
         <div class="av" style="background:rgba(255,255,255,.04);border-color:var(--border);color:var(--muted);">${emp.name[0]}</div>
         <div style="flex:1;min-width:0;"><div style="font-weight:600;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${emp.name}</div>
-          <span class="badge b${emp.role === 'Server' ? 's' : role === 'Admin' ? 'a' : 'b'}">${emp.role}</span></div>
+          <span class="badge b${emp.role === 'Server' ? 's' : emp.role === 'Admin' ? 'a' : 'b'}">${emp.role}</span></div>
         <div style="color:var(--amber);font-size:22px;flex-shrink:0;">+</div>
       </div>`).join('');
   }
@@ -1203,7 +1203,7 @@ function renderTipsList() {
       <div class="av" style="width:32px;height:32px;font-size:13px;">${e.name[0]}</div>
       <div style="flex:1;"><div style="font-size:14px;font-weight:500;">${e.name}</div>
         <div style="display:flex;gap:6px;margin-top:3px;">
-          <span class="badge b${e.role === 'Server' ? 's' : role === 'Admin' ? 'a' : 'b'}">${e.role}</span>
+          <span class="badge b${e.role === 'Server' ? 's' : e.role === 'Admin' ? 'a' : 'b'}">${e.role}</span>
           ${on && isAuto  ? '<span class="tc-badge tc-auto">on shift</span>'  : ''}
           ${on && !isAuto ? '<span class="tc-badge tc-added">added</span>'    : ''}
         </div></div>
@@ -1340,7 +1340,7 @@ function renderSummary() {
     return `<div class="summary-emp-card">
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">
         <div class="av">${e.name[0]}</div>
-        <div><div style="font-weight:600;font-size:15px;">${e.name}</div><span class="badge b${e.role === 'Server' ? 's' : role === 'Admin' ? 'a' : 'b'}">${e.role}</span></div>
+        <div><div style="font-weight:600;font-size:15px;">${e.name}</div><span class="badge b${e.role === 'Server' ? 's' : e.role === 'Admin' ? 'a' : 'b'}">${e.role}</span></div>
         <div style="flex:1;"></div>
         <div style="text-align:right;"><div style="font-family:'Playfair Display',serif;font-size:20px;color:var(--amber);">$${c.toFixed(2)}</div><div style="font-size:11px;color:var(--muted);">Total</div></div>
       </div>
