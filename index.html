@@ -741,12 +741,10 @@ window.doLogin = async function () {
       const fresh = await loadUserData(target);
       if (fresh && fresh._ts > (S._ts || 0)) {
         S = Object.assign(defData(), fresh);
-        if (_role !== 'Admin') {
-          if (document.getElementById('screen-tips')?.classList.contains('active')) renderTips();
-        }
+        if (document.getElementById('screen-tips')?.classList.contains('active')) renderSavedTips();
       }
       await loadAccounts();
-    }, 30000);
+    }, 5000);
   } else {
     hideLoader();
     document.getElementById('lerr').textContent = 'Incorrect username or password.';
@@ -1609,12 +1607,10 @@ window.onload = async function () {
         const fresh = await loadUserData(target);
         if (fresh && fresh._ts > (S._ts || 0)) {
           S = Object.assign(defData(), fresh);
-          if (_role !== 'Admin') {
-            if (document.getElementById('screen-tips')?.classList.contains('active')) renderTips();
-          }
+          if (document.getElementById('screen-tips')?.classList.contains('active')) renderSavedTips();
         }
         await loadAccounts();
-      }, 30000);
+      }, 5000);
 
       return;
     }
