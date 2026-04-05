@@ -251,6 +251,7 @@ body{height:100%;background:#0F1117!important;color:#EEE9E3;font-family:'DM Sans
         </div>
       </div>
       <div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:14px;scrollbar-width:none;" id="tip-date-strip"></div>
+      <div class="fg" style="margin-bottom:14px;"><div class="fl">Tip Time</div><input class="fi" id="tip-time-input" type="time"></div>
       <div style="display:flex;align-items:center;gap:10px;">
         <div style="flex:1;"><div class="fl">From</div><input class="fi" id="tip-from" type="time" value="11:00"></div>
         <div style="color:var(--muted);font-size:18px;margin-top:16px;">–</div>
@@ -303,10 +304,11 @@ body{height:100%;background:#0F1117!important;color:#EEE9E3;font-family:'DM Sans
     </div>
     <div class="card" style="margin-bottom:10px;">
       <div class="fg"><div class="fl">Tip Amount ($)</div><input class="fi" id="emp-tip-amount" type="number" value="" min="0" step="1" placeholder="0.00"></div>
+      <div class="fg"><div class="fl">Tip Time</div><input class="fi" id="emp-tip-time" type="time"></div>
       <button class="abtn" style="width:100%;padding:14px;" onclick="submitEmployeeTip()">Submit Tip</button>
     </div>
     <div style="margin:0 16px 20px;">
-      <div style="font-size:11px;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:10px;">MY PAST SUBMISSIONS</div>
+      <div style="font-size:11px;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:10px;">TIPS FOR THIS DAY</div>
       <div id="emp-tips-history"></div>
     </div>
   </div>
@@ -1110,6 +1112,12 @@ window.copySchedule = function () {
 //    true    → manually added by user
 //    false   → not selected (or explicitly removed)
 // ════════════════════════════════════════════════════════════════
+function fmtTime(t) {
+  if (!t) return '';
+  const [h, m] = t.split(':').map(Number);
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  return `${h % 12 || 12}:${String(m).padStart(2,'0')} ${ampm}`;
+}
 function fmtTipDate(k) {
   if (!k) return '—';
   return new Date(k + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
@@ -1196,6 +1204,8 @@ function renderTips() {
   const ps = document.getElementById('tip-pct-s'), pb = document.getElementById('tip-pct-b');
   if (ps) ps.value = S.tipPcts.server; if (pb) pb.value = S.tipPcts.busboy;
   const tt = document.getElementById('tip-total'); if (tt) tt.value = 0;
+  const ti = document.getElementById('tip-time-input');
+  if (ti && !ti.value) { const now = new Date(); ti.value = now.toTimeString().slice(0,5); }
   S.employees.forEach(e => { if (_tipChecked[e.id] === undefined) _tipChecked[e.id] = false; });
   renderTipsList();
   renderSavedTips();
@@ -1207,6 +1217,9 @@ function renderEmpTipsView() {
   if (!_tipDate) _tipDate = new Date().toISOString().split('T')[0];
   const dd = document.getElementById('emp-tip-date-display');
   if (dd) dd.textContent = fmtTipDate(_tipDate);
+  // Init time input to current time if blank
+  const et = document.getElementById('emp-tip-time');
+  if (et && !et.value) { const now = new Date(); et.value = now.toTimeString().slice(0,5); }
   // Build date strip
   const today = new Date(), days = [];
   for (let i = -3; i <= 6; i++) { const d = new Date(today); d.setDate(d.getDate() + i); days.push(d); }
@@ -1218,22 +1231,35 @@ function renderEmpTipsView() {
       <div style="font-size:17px;font-weight:700;color:${active ? '#000' : 'var(--cream)'};">${d.getDate()}</div>
     </div>`;
   }).join('');
-  // My past submissions
-  const myTips = (S.tips || []).filter(t => t.submittedBy === _cu).sort((a,b) => b.id - a.id);
+  // All tips for the selected day
+  const dayTips = (S.tips || []).filter(t => t.date === _tipDate).sort((a,b) => b.id - a.id);
   const hist = document.getElementById('emp-tips-history');
-  if (hist) hist.innerHTML = myTips.length
-    ? myTips.map(t => `<div style="background:var(--card2);border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;">
-        <div style="font-size:12px;color:var(--muted);">${fmtTipDate(t.date)}</div>
-        <div style="font-size:15px;font-weight:700;color:var(--amber);">$${(t.amount ?? t.total ?? 0).toFixed(2)}</div>
-      </div>`).join('')
-    : '<div style="color:var(--muted);font-size:13px;padding:8px 0;">No tips submitted yet</div>';
+  if (!hist) return;
+  if (!dayTips.length) { hist.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:8px 0;">No tips saved for this day yet</div>'; return; }
+  hist.innerHTML = dayTips.map(t => {
+    const timeStr = t.tipTime ? fmtTime(t.tipTime) : (t.timestamp ? new Date(t.timestamp).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',hour12:true}) : '');
+    const recs = (t.receivers || []).map(id => S.employees.find(e => e.id === id)?.name || '?');
+    const recsStr = recs.length ? recs.join(', ') : '';
+    const mine = t.submittedBy === _cu;
+    return `<div style="background:var(--card2);border:1px solid ${mine ? 'rgba(245,158,11,.35)' : 'var(--border)'};border-radius:12px;padding:13px 14px;margin-bottom:8px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:${recsStr ? '8px' : '0'};">
+        <div>
+          ${timeStr ? `<div style="font-size:12px;color:var(--amber);font-weight:600;margin-bottom:2px;">${timeStr}</div>` : ''}
+          ${t.submittedBy ? `<div style="font-size:11px;color:var(--muted);">by ${t.submittedBy}${mine ? ' (you)' : ''}</div>` : ''}
+        </div>
+        <div style="font-size:17px;font-weight:700;color:var(--amber);">$${(t.total ?? t.amount ?? 0).toFixed(2)}</div>
+      </div>
+      ${recsStr ? `<div style="font-size:12px;color:var(--muted);border-top:1px solid var(--border);padding-top:7px;">👥 ${recsStr}</div>` : ''}
+    </div>`;
+  }).join('');
 }
 window.selEmpTipDate = function(k) { _tipDate = k; renderEmpTipsView(); };
 window.submitEmployeeTip = async function() {
   const amount = parseFloat(document.getElementById('emp-tip-amount')?.value) || 0;
   if (amount <= 0) { toast('Enter a tip amount'); return; }
   if (!_tipDate) { toast('Select a date'); return; }
-  const tip = { id: Date.now(), date: _tipDate, amount, submittedBy: _cu, role: _role, timestamp: new Date().toISOString() };
+  const tipTime = document.getElementById('emp-tip-time')?.value || new Date().toTimeString().slice(0,5);
+  const tip = { id: Date.now(), date: _tipDate, amount, submittedBy: _cu, role: _role, tipTime, timestamp: new Date().toISOString() };
   showLoader('Submitting…');
   const ok = await apiPOST({ action: 'submitEmployeeTip', adminUser: _adminUser, tip });
   hideLoader();
@@ -1325,7 +1351,9 @@ function renderSavedTips() {
       const amt = e.role === 'Server' && srvs.length ? sp2 / srvs.length : e.role === 'Busboy' && bbs.length ? bp2 / bbs.length : 0;
       return `<div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0;"><span style="color:var(--muted);">${e.name}</span><span style="color:var(--green);">$${amt.toFixed(2)}</span></div>`;
     }).join('');
-    return `<div class="saved-tip-entry"><div class="saved-tip-header"><div style="font-size:15px;font-weight:700;color:var(--amber);">$${(t.total ?? t.amount ?? 0).toFixed(2)}</div><button class="saved-tip-del" onclick="deleteTip('${t.id}')">×</button></div><div class="saved-tip-names">${recs}</div>${lines}${t.submittedBy ? `<div style="font-size:11px;color:var(--amber);margin-top:4px;">Added by ${t.submittedBy}</div>` : ''}</div>`;
+    const timeStr = t.tipTime ? fmtTime(t.tipTime) : '';
+    const meta = [timeStr, t.submittedBy ? `by ${t.submittedBy}` : ''].filter(Boolean).join(' · ');
+    return `<div class="saved-tip-entry"><div class="saved-tip-header"><div><div style="font-size:15px;font-weight:700;color:var(--amber);">$${(t.total ?? t.amount ?? 0).toFixed(2)}</div>${meta ? `<div style="font-size:11px;color:var(--muted);margin-top:2px;">${meta}</div>` : ''}</div><button class="saved-tip-del" onclick="deleteTip('${t.id}')">×</button></div><div class="saved-tip-names">${recs}</div>${lines}</div>`;
   }).join('');
 }
 
@@ -1337,7 +1365,8 @@ window.saveTips = function () {
   if (!receivers.length) { toast('Select at least one employee'); return; }
   const sp = parseFloat(document.getElementById('tip-pct-s').value) || 0;
   const bp = parseFloat(document.getElementById('tip-pct-b').value) || 0;
-  S.tips.push({ id: Date.now(), date: _tipDate, total, receivers, serverPct: sp, busboyPct: bp, submittedBy: _cu, timestamp: new Date().toISOString() });
+  const tipTime = document.getElementById('tip-time-input')?.value || new Date().toTimeString().slice(0,5);
+  S.tips.push({ id: Date.now(), date: _tipDate, total, receivers, serverPct: sp, busboyPct: bp, submittedBy: _cu, tipTime, timestamp: new Date().toISOString() });
   save();
   toast('Tip entry saved ✓');
   document.getElementById('tip-total').value = 0;
