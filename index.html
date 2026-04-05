@@ -224,7 +224,10 @@ body{height:100%;background:#0F1117!important;color:#EEE9E3;font-family:'DM Sans
     <div style="position:sticky;top:0;z-index:5;background:#0F1117;">
       <div class="ph" style="display:flex;align-items:center;justify-content:space-between;">
         <div><div class="pt">Schedule</div><div class="ps" id="sw-lbl"></div></div>
-        <div style="display:flex;gap:8px;"><button class="wn-btn" onclick="changeWeek(-1)">‹</button><button class="wn-btn" onclick="changeWeek(1)">›</button></div>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <button onclick="copyLastWeek()" style="background:rgba(245,158,11,.15);color:var(--amber);border:1px solid rgba(245,158,11,.3);border-radius:10px;padding:7px 12px;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:600;cursor:pointer;">Copy Last Week</button>
+          <button class="wn-btn" onclick="changeWeek(-1)">‹</button><button class="wn-btn" onclick="changeWeek(1)">›</button>
+        </div>
       </div>
       <div class="day-pill-row" id="sched-pills"></div>
     </div>
@@ -738,13 +741,13 @@ window.doLogin = async function () {
     window._syncInterval = setInterval(async () => {
       if (!_cu || document.visibilityState !== 'visible') return;
       const target = _role === 'Admin' ? _cu : _adminUser;
-      const fresh = await loadUserData(target);
-      if (fresh && fresh._ts > (S._ts || 0)) {
+      const prevTs = S._ts || 0;
+      const fresh = await apiGET({ action: 'getUser', user: target });
+      if (fresh && fresh._ts > prevTs) {
         S = Object.assign(defData(), fresh);
         if (document.getElementById('screen-tips')?.classList.contains('active')) renderSavedTips();
       }
-      await loadAccounts();
-    }, 5000);
+    }, 3000);
   } else {
     hideLoader();
     document.getElementById('lerr').textContent = 'Incorrect username or password.';
@@ -968,6 +971,16 @@ function renderSchedule() {
   renderSchedContent();
 }
 window.selDay = i => { _schedDay = i; renderSchedule(); };
+window.copyLastWeek = function () {
+  const lastWk = wkKey(S.weekOffset - 1);
+  const lastData = S.schedules[lastWk];
+  if (!lastData || !Object.values(lastData).some(days => Object.keys(days).length)) {
+    toast('No shifts found for last week'); return;
+  }
+  const curWk = wkKey(S.weekOffset);
+  S.schedules[curWk] = JSON.parse(JSON.stringify(lastData));
+  save(); renderSchedule(); toast('Last week copied ✓');
+};
 
 function renderSchedContent() {
   const off = S.weekOffset, dk = DKS[_schedDay], wk = wkKey(off);
@@ -1604,13 +1617,13 @@ window.onload = async function () {
       window._syncInterval = setInterval(async () => {
         if (!_cu || document.visibilityState !== 'visible') return;
         const target = _role === 'Admin' ? _cu : _adminUser;
-        const fresh = await loadUserData(target);
-        if (fresh && fresh._ts > (S._ts || 0)) {
+        const prevTs = S._ts || 0;
+        const fresh = await apiGET({ action: 'getUser', user: target });
+        if (fresh && fresh._ts > prevTs) {
           S = Object.assign(defData(), fresh);
           if (document.getElementById('screen-tips')?.classList.contains('active')) renderSavedTips();
         }
-        await loadAccounts();
-      }, 5000);
+      }, 3000);
 
       return;
     }
