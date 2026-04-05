@@ -51,6 +51,7 @@ body{height:100%;background:#0F1117!important;color:#EEE9E3;font-family:'DM Sans
 .badge{display:inline-block;border-radius:20px;padding:3px 10px;font-size:11px;font-weight:600;}
 .bs{background:rgba(59,130,246,.2);color:#60A5FA;}
 .bb{background:rgba(139,92,246,.2);color:#A78BFA;}
+.ba{background:rgba(245,158,11,.2);color:#FCD34D;}
 .fi{width:100%;background:rgba(255,255,255,.05);border:1px solid var(--border);border-radius:10px;padding:11px 14px;font-family:'DM Sans',sans-serif;font-size:14px;color:var(--cream);outline:none;transition:border-color .2s;}
 .fi:focus{border-color:var(--amber);}
 .fl{font-size:12px;color:var(--muted);margin-bottom:6px;}
@@ -294,27 +295,6 @@ body{height:100%;background:#0F1117!important;color:#EEE9E3;font-family:'DM Sans
     </div>
   </div>
 
-  <div id="emp-tips-view" style="display:none;">
-    <div class="ph"><div class="pt">My Tips</div><div class="ps" id="emp-tip-user-label"></div></div>
-    <div class="card" style="margin-bottom:10px;padding:16px;">
-      <div style="font-size:11px;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:3px;">Date</div>
-      <div style="font-size:17px;font-weight:700;color:var(--cream);margin-bottom:12px;" id="emp-tip-date-display">—</div>
-      <div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:8px;scrollbar-width:none;" id="emp-tip-date-strip"></div>
-    </div>
-    <div class="card" style="margin-bottom:10px;">
-      <div class="fg"><div class="fl">Tip Amount ($)</div><input class="fi" id="emp-tip-amount" type="number" value="" min="0" step="1" placeholder="0.00"></div>
-      <div style="display:flex;align-items:center;gap:10px;">
-        <div style="flex:1;"><div class="fl">From</div><input class="fi" id="emp-tip-from" type="time"></div>
-        <div style="color:var(--muted);font-size:18px;margin-top:16px;">–</div>
-        <div style="flex:1;"><div class="fl">To</div><input class="fi" id="emp-tip-to" type="time"></div>
-      </div>
-      <button class="abtn" style="width:100%;padding:14px;margin-top:12px;" onclick="submitEmployeeTip()">Submit Tip</button>
-    </div>
-    <div style="margin:0 16px 20px;">
-      <div style="font-size:11px;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:10px;">TIPS FOR THIS DAY</div>
-      <div id="emp-tips-history"></div>
-    </div>
-  </div>
 
   </div>
 
@@ -376,7 +356,7 @@ body{height:100%;background:#0F1117!important;color:#EEE9E3;font-family:'DM Sans
   <div class="ms">
     <div class="mt" id="emp-modal-title">Add Employee</div>
     <div class="fg"><div class="fl">Name</div><input class="fi" id="emp-name" placeholder="Employee name"></div>
-    <div class="fg"><div class="fl">Role</div><select class="fi" id="emp-role" style="cursor:pointer;"><option value="Server">Server</option><option value="Busboy">Busboy</option></select></div>
+    <div class="fg"><div class="fl">Role</div><select class="fi" id="emp-role" style="cursor:pointer;"><option value="Server">Server</option><option value="Busboy">Busboy</option><option value="Admin">Admin</option></select></div>
     <div class="ma"><button class="gbtn" onclick="closeM('emp-modal')">Cancel</button><button class="abtn" onclick="saveEmployee()">Save</button></div>
   </div>
 </div>
@@ -762,7 +742,7 @@ window.doLogin = async function () {
       if (fresh && fresh._ts > (S._ts || 0)) {
         S = Object.assign(defData(), fresh);
         if (_role !== 'Admin') {
-          if (document.getElementById('screen-tips')?.classList.contains('active')) renderEmpTipsView();
+          if (document.getElementById('screen-tips')?.classList.contains('active')) renderTips();
         }
       }
       await loadAccounts();
@@ -789,7 +769,6 @@ window.doLogout = function () {
       if (el) el.style.display = '';
     });
     document.getElementById('admin-tips-view').style.display = '';
-    document.getElementById('emp-tips-view').style.display = 'none';
     document.getElementById('settings-data-section').style.display = '';
     document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
     document.getElementById('screen-home').classList.add('active');
@@ -896,7 +875,7 @@ function renderEmployees() {
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px;">
         <div class="av">${e.name[0].toUpperCase()}</div>
         <div style="flex:1;"><div style="font-weight:600;font-size:15px;">${e.name}</div>
-          <span class="badge b${e.role === 'Server' ? 's' : 'b'}">${e.role}</span></div>
+          <span class="badge b${e.role === 'Server' ? 's' : role === 'Admin' ? 'a' : 'b'}">${e.role}</span></div>
         <div style="display:flex;gap:8px;">
           <button class="ibt" onclick="openEmpModal('${e.id}')">✏️</button>
           <button class="ibt" onclick="removeEmp('${e.id}')">🗑️</button>
@@ -904,7 +883,7 @@ function renderEmployees() {
       </div>
       <div class="div"></div>
       <div style="display:flex;gap:16px;flex-wrap:wrap;">
-        <div><div class="fl">Rate</div><div style="font-size:15px;font-weight:600;color:var(--amber);">$${e.role === 'Server' ? S.rates.server : S.rates.busboy}/hr</div></div>
+        <div><div class="fl">Rate</div><div style="font-size:15px;font-weight:600;color:var(--amber);">$${e.role === 'Busboy' ? S.rates.busboy : S.rates.server}/hr</div></div>
         <div><div class="fl">This Week</div><div style="font-size:15px;font-weight:600;">${empWeekH(e.id, S.weekOffset)}h</div></div>
         <div><div class="fl">Wages</div><div style="font-size:15px;font-weight:600;color:var(--green);">$${empWages(e.id, S.weekOffset).toFixed(2)}</div></div>
       </div>
@@ -932,7 +911,7 @@ function empWeekH(eid, off) {
 }
 function empWages(eid, off) {
   const e = S.employees.find(x => x.id === eid); if (!e) return 0;
-  return parseFloat(empWeekH(eid, off)) * (e.role === 'Server' ? S.rates.server : S.rates.busboy);
+  return parseFloat(empWeekH(eid, off)) * (e.role === 'Busboy' ? S.rates.busboy : S.rates.server);
 }
 function empTips(eid, off) {
   const s = wkStart(off), en = new Date(s); en.setDate(en.getDate() + 6);
@@ -1024,7 +1003,7 @@ function renderSchedContent() {
       <div class="add-member-card" onclick="openShiftModal('${emp.id}','${dk}')">
         <div class="av" style="background:rgba(255,255,255,.04);border-color:var(--border);color:var(--muted);">${emp.name[0]}</div>
         <div style="flex:1;min-width:0;"><div style="font-weight:600;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${emp.name}</div>
-          <span class="badge b${emp.role === 'Server' ? 's' : 'b'}">${emp.role}</span></div>
+          <span class="badge b${emp.role === 'Server' ? 's' : role === 'Admin' ? 'a' : 'b'}">${emp.role}</span></div>
         <div style="color:var(--amber);font-size:22px;flex-shrink:0;">+</div>
       </div>`).join('');
   }
@@ -1200,102 +1179,18 @@ function autoLoadTipWorkers(force = false) {
 }
 
 function renderTips() {
-  if (_role !== 'Admin') {
-    document.getElementById('admin-tips-view').style.display = 'none';
-    document.getElementById('emp-tips-view').style.display = '';
-    renderEmpTipsView();
-    return;
-  }
-  document.getElementById('admin-tips-view').style.display = '';
-  document.getElementById('emp-tips-view').style.display = 'none';
   buildTipDateStrip(); updateTipHeader();
   const ps = document.getElementById('tip-pct-s'), pb = document.getElementById('tip-pct-b');
   if (ps) ps.value = S.tipPcts.server; if (pb) pb.value = S.tipPcts.busboy;
   const tt = document.getElementById('tip-total'); if (tt) tt.value = 0;
+  const nowStr = new Date().toTimeString().slice(0,5);
+  const tf = document.getElementById('tip-from'), tto = document.getElementById('tip-to');
+  if (tf && !tf.value) tf.value = nowStr; if (tto && !tto.value) tto.value = nowStr;
   S.employees.forEach(e => { if (_tipChecked[e.id] === undefined) _tipChecked[e.id] = false; });
   renderTipsList();
   renderSavedTips();
 }
 
-function renderEmpTipsView() {
-  const el = document.getElementById('emp-tip-user-label');
-  if (el) el.textContent = _cu || '';
-  if (!_tipDate) _tipDate = new Date().toISOString().split('T')[0];
-  const dd = document.getElementById('emp-tip-date-display');
-  if (dd) dd.textContent = fmtTipDate(_tipDate);
-  // Init From/To to current time if blank
-  const now = new Date(), nowStr = now.toTimeString().slice(0,5);
-  const ef = document.getElementById('emp-tip-from'), eto = document.getElementById('emp-tip-to');
-  if (ef && !ef.value) ef.value = nowStr;
-  if (eto && !eto.value) eto.value = nowStr;
-  // Build date strip
-  const today = new Date(), days = [];
-  for (let i = -3; i <= 6; i++) { const d = new Date(today); d.setDate(d.getDate() + i); days.push(d); }
-  const strip = document.getElementById('emp-tip-date-strip');
-  if (strip) strip.innerHTML = days.map(d => {
-    const k = d.toISOString().split('T')[0], active = k === _tipDate;
-    return `<div style="flex-shrink:0;display:flex;flex-direction:column;align-items:center;padding:9px 13px;border-radius:12px;cursor:pointer;min-width:52px;border:1px solid ${active ? 'var(--amber)' : 'var(--border)'};background:${active ? 'var(--amber)' : 'var(--card2)'};" onclick="selEmpTipDate('${k}')">
-      <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:${active ? '#000' : 'var(--muted)'};">${d.toLocaleDateString('en-US',{weekday:'short'})}</div>
-      <div style="font-size:17px;font-weight:700;color:${active ? '#000' : 'var(--cream)'};">${d.getDate()}</div>
-    </div>`;
-  }).join('');
-  // All tips for the selected day
-  const dayTips = (S.tips || []).filter(t => t.date === _tipDate).sort((a,b) => b.id - a.id);
-  const hist = document.getElementById('emp-tips-history');
-  if (!hist) return;
-  if (!dayTips.length) { hist.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:8px 0;">No tips saved for this day yet</div>'; return; }
-  hist.innerHTML = dayTips.map(t => {
-    const timeStr = fmtTimeRange(t.timeFrom || t.tipTime, t.timeTo || t.tipTime);
-    const mine = t.submittedBy === _cu;
-    const sel = S.employees.filter(e => t.receivers && t.receivers.includes(e.id));
-    const srvs = sel.filter(e => e.role === 'Server'), bbs = sel.filter(e => e.role === 'Busboy');
-    let asp = 0, abp = 0;
-    if (srvs.length && bbs.length) { asp = t.serverPct; abp = t.busboyPct; }
-    else if (srvs.length) asp = 100; else if (bbs.length) abp = 100;
-    const sp2 = (t.total || 0) * asp / 100, bp2 = (t.total || 0) * abp / 100;
-    const receiverLines = sel.map(e => {
-      const amt = e.role === 'Server' && srvs.length ? sp2 / srvs.length : e.role === 'Busboy' && bbs.length ? bp2 / bbs.length : 0;
-      return `<div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0;"><span style="color:var(--muted);">${e.name}</span><span style="color:var(--green);">$${amt.toFixed(2)}</span></div>`;
-    }).join('');
-    const recsStr = sel.map(e => e.name).join(', ');
-    return `<div style="background:var(--card2);border:1px solid ${mine ? 'rgba(245,158,11,.35)' : 'var(--border)'};border-radius:12px;padding:13px 14px;margin-bottom:8px;">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;">
-        <div>
-          ${timeStr ? `<div style="font-size:12px;color:var(--amber);font-weight:600;margin-bottom:2px;">${timeStr}</div>` : ''}
-          ${t.submittedBy ? `<div style="font-size:11px;color:var(--muted);">by ${t.submittedBy}${mine ? ' (you)' : ''}</div>` : ''}
-        </div>
-        <div style="display:flex;align-items:center;gap:10px;">
-          <div style="font-size:17px;font-weight:700;color:var(--amber);">$${(t.total ?? t.amount ?? 0).toFixed(2)}</div>
-          <button onclick="deleteTip('${t.id}')" style="background:none;border:none;color:var(--muted);font-size:18px;cursor:pointer;line-height:1;padding:0 4px;">×</button>
-        </div>
-      </div>
-      ${recsStr || receiverLines ? `<div style="border-top:1px solid var(--border);margin-top:8px;padding-top:8px;">${receiverLines || `<div style="font-size:12px;color:var(--muted);">${recsStr}</div>`}</div>` : ''}
-    </div>`;
-  }).join('');
-}
-window.selEmpTipDate = function(k) { _tipDate = k; renderEmpTipsView(); };
-window.submitEmployeeTip = async function() {
-  const amount = parseFloat(document.getElementById('emp-tip-amount')?.value) || 0;
-  if (amount <= 0) { toast('Enter a tip amount'); return; }
-  if (!_tipDate) { toast('Select a date'); return; }
-  const timeFrom = document.getElementById('emp-tip-from')?.value || '';
-  const timeTo   = document.getElementById('emp-tip-to')?.value   || '';
-  const tip = { id: Date.now(), date: _tipDate, amount, submittedBy: _cu, role: _role, timeFrom, timeTo, timestamp: new Date().toISOString() };
-  showLoader('Submitting…');
-  const ok = await apiPOST({ action: 'submitEmployeeTip', adminUser: _adminUser, tip });
-  hideLoader();
-  if (ok) {
-    toast('Tip submitted ✓');
-    const el = document.getElementById('emp-tip-amount'); if (el) el.value = '';
-    const ef2 = document.getElementById('emp-tip-from'), et2 = document.getElementById('emp-tip-to');
-    if (ef2) ef2.value = ''; if (et2) et2.value = '';
-    const fresh = await loadUserData(_adminUser);
-    if (fresh) { S = Object.assign(defData(), fresh); }
-    renderEmpTipsView();
-  } else {
-    toast('Failed to submit — try again');
-  }
-};
 
 function renderTipsList() {
   const list = document.getElementById('tip-emp-list'); if (!list) return;
@@ -1308,7 +1203,7 @@ function renderTipsList() {
       <div class="av" style="width:32px;height:32px;font-size:13px;">${e.name[0]}</div>
       <div style="flex:1;"><div style="font-size:14px;font-weight:500;">${e.name}</div>
         <div style="display:flex;gap:6px;margin-top:3px;">
-          <span class="badge b${e.role === 'Server' ? 's' : 'b'}">${e.role}</span>
+          <span class="badge b${e.role === 'Server' ? 's' : role === 'Admin' ? 'a' : 'b'}">${e.role}</span>
           ${on && isAuto  ? '<span class="tc-badge tc-auto">on shift</span>'  : ''}
           ${on && !isAuto ? '<span class="tc-badge tc-added">added</span>'    : ''}
         </div></div>
@@ -1333,7 +1228,7 @@ window.calcTips = function () {
   const bp    = parseFloat(document.getElementById('tip-pct-b')?.value)  || 0;
   S.tipPcts.server = sp; S.tipPcts.busboy = bp;
   const sel  = S.employees.filter(e => _tipChecked[e.id] === 'auto' || _tipChecked[e.id] === true);
-  const srvs = sel.filter(e => e.role === 'Server');
+  const srvs = sel.filter(e => e.role === 'Server' || e.role === 'Admin');
   const bbs  = sel.filter(e => e.role === 'Busboy');
   let asp = 0, abp = 0;
   if (srvs.length && bbs.length) { asp = sp; abp = bp; }
@@ -1345,7 +1240,7 @@ window.calcTips = function () {
     const on = _tipChecked[e.id] === 'auto' || _tipChecked[e.id] === true;
     let amt = 0, pstr = '—';
     if (on) {
-      if (e.role === 'Server' && srvs.length) { amt = spool / srvs.length; pstr = srvs.length === 1 ? '100%' : `${asp}%÷${srvs.length}`; }
+      if ((e.role === 'Server' || e.role === 'Admin') && srvs.length) { amt = spool / srvs.length; pstr = srvs.length === 1 ? '100%' : `${asp}%÷${srvs.length}`; }
       if (e.role === 'Busboy'  && bbs.length)  { amt = bpool / bbs.length;  pstr = bbs.length  === 1 ? '100%' : `${abp}%÷${bbs.length}`; }
     }
     const ae = document.getElementById('ta-' + e.id), pe = document.getElementById('tp-' + e.id);
@@ -1365,13 +1260,13 @@ function renderSavedTips() {
   c.innerHTML = dayTips.map(t => {
     const recs = (t.receivers || []).map(id => S.employees.find(e => e.id === id)?.name || '?').join(', ');
     const sel  = S.employees.filter(e => t.receivers && t.receivers.includes(e.id));
-    const srvs = sel.filter(e => e.role === 'Server'), bbs = sel.filter(e => e.role === 'Busboy');
+    const srvs = sel.filter(e => e.role === 'Server' || e.role === 'Admin'), bbs = sel.filter(e => e.role === 'Busboy');
     let asp = 0, abp = 0;
     if (srvs.length && bbs.length) { asp = t.serverPct; abp = t.busboyPct; }
     else if (srvs.length) asp = 100; else if (bbs.length) abp = 100;
     const sp2 = t.total * asp / 100, bp2 = t.total * abp / 100;
     const lines = sel.map(e => {
-      const amt = e.role === 'Server' && srvs.length ? sp2 / srvs.length : e.role === 'Busboy' && bbs.length ? bp2 / bbs.length : 0;
+      const amt = (e.role === 'Server' || e.role === 'Admin') && srvs.length ? sp2 / srvs.length : e.role === 'Busboy' && bbs.length ? bp2 / bbs.length : 0;
       return `<div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0;"><span style="color:var(--muted);">${e.name}</span><span style="color:var(--green);">$${amt.toFixed(2)}</span></div>`;
     }).join('');
     const timeStr = fmtTimeRange(t.timeFrom || t.tipTime, t.timeTo || t.tipTime);
@@ -1380,7 +1275,7 @@ function renderSavedTips() {
   }).join('');
 }
 
-window.saveTips = function () {
+window.saveTips = async function () {
   const total = parseFloat(document.getElementById('tip-total').value) || 0;
   if (total <= 0) { toast('Enter a tip amount'); return; }
   if (!_tipDate)  { toast('Select a date');      return; }
@@ -1390,11 +1285,25 @@ window.saveTips = function () {
   const bp = parseFloat(document.getElementById('tip-pct-b').value) || 0;
   const timeFrom = document.getElementById('tip-from')?.value || '';
   const timeTo   = document.getElementById('tip-to')?.value   || '';
-  S.tips.push({ id: Date.now(), date: _tipDate, total, receivers, serverPct: sp, busboyPct: bp, submittedBy: _cu, timeFrom, timeTo, timestamp: new Date().toISOString() });
-  save();
-  toast('Tip entry saved ✓');
-  document.getElementById('tip-total').value = 0;
-  calcTips(); renderSavedTips(); renderSummary();
+  const tip = { id: Date.now(), date: _tipDate, total, receivers, serverPct: sp, busboyPct: bp, submittedBy: _cu, timeFrom, timeTo, timestamp: new Date().toISOString() };
+  if (_role === 'Admin') {
+    S.tips.push(tip);
+    save();
+    toast('Tip entry saved ✓');
+    document.getElementById('tip-total').value = 0;
+    calcTips(); renderSavedTips(); renderSummary();
+  } else {
+    showLoader('Saving…');
+    const ok = await apiPOST({ action: 'submitEmployeeTip', adminUser: _adminUser, tip });
+    hideLoader();
+    if (ok) {
+      toast('Tip entry saved ✓');
+      document.getElementById('tip-total').value = 0;
+      const fresh = await loadUserData(_adminUser);
+      if (fresh) { S = Object.assign(defData(), fresh); }
+      calcTips(); renderSavedTips(); renderSummary();
+    } else { toast('Failed to save — try again'); }
+  }
 };
 window.deleteTip = async function (id) {
   if (_role === 'Admin') {
@@ -1407,7 +1316,7 @@ window.deleteTip = async function (id) {
     if (ok) {
       const fresh = await loadUserData(_adminUser);
       if (fresh) { S = Object.assign(defData(), fresh); }
-      renderEmpTipsView(); toast('Tip removed');
+      renderSavedTips(); toast('Tip removed');
     } else { toast('Failed to remove — try again'); }
   }
 };
@@ -1431,7 +1340,7 @@ function renderSummary() {
     return `<div class="summary-emp-card">
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">
         <div class="av">${e.name[0]}</div>
-        <div><div style="font-weight:600;font-size:15px;">${e.name}</div><span class="badge b${e.role === 'Server' ? 's' : 'b'}">${e.role}</span></div>
+        <div><div style="font-weight:600;font-size:15px;">${e.name}</div><span class="badge b${e.role === 'Server' ? 's' : role === 'Admin' ? 'a' : 'b'}">${e.role}</span></div>
         <div style="flex:1;"></div>
         <div style="text-align:right;"><div style="font-family:'Playfair Display',serif;font-size:20px;color:var(--amber);">$${c.toFixed(2)}</div><div style="font-size:11px;color:var(--muted);">Total</div></div>
       </div>
@@ -1439,7 +1348,7 @@ function renderSummary() {
         <div class="ss"><div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;">Hours</div><div style="font-size:18px;font-weight:700;color:var(--cream);margin-top:2px;">${h.toFixed(1)}h</div></div>
         <div class="ss"><div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;">Wages</div><div style="font-size:18px;font-weight:700;color:var(--amber);margin-top:2px;">$${w.toFixed(2)}</div></div>
         <div class="ss"><div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;">Tips</div><div style="font-size:18px;font-weight:700;color:var(--green);margin-top:2px;">$${t.toFixed(2)}</div></div>
-        <div class="ss"><div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;">Rate</div><div style="font-size:18px;font-weight:700;color:var(--muted);margin-top:2px;">$${e.role === 'Server' ? S.rates.server : S.rates.busboy}/h</div></div>
+        <div class="ss"><div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;">Rate</div><div style="font-size:18px;font-weight:700;color:var(--muted);margin-top:2px;">$${e.role === 'Busboy' ? S.rates.busboy : S.rates.server}/h</div></div>
       </div>
     </div>`;
   }).join('');
@@ -1632,7 +1541,7 @@ function _wireEvents() {
         if (_role === 'Admin') {
           _initScreens();
         } else {
-          if (document.getElementById('screen-tips')?.classList.contains('active')) renderEmpTipsView();
+          if (document.getElementById('screen-tips')?.classList.contains('active')) renderTips();
         }
       }
     }
@@ -1701,7 +1610,7 @@ window.onload = async function () {
         if (fresh && fresh._ts > (S._ts || 0)) {
           S = Object.assign(defData(), fresh);
           if (_role !== 'Admin') {
-            if (document.getElementById('screen-tips')?.classList.contains('active')) renderEmpTipsView();
+            if (document.getElementById('screen-tips')?.classList.contains('active')) renderTips();
           }
         }
         await loadAccounts();
