@@ -251,7 +251,6 @@ body{height:100%;background:#0F1117!important;color:#EEE9E3;font-family:'DM Sans
         </div>
       </div>
       <div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:14px;scrollbar-width:none;" id="tip-date-strip"></div>
-      <div class="fg" style="margin-bottom:14px;"><div class="fl">Tip Time</div><input class="fi" id="tip-time-input" type="time"></div>
       <div style="display:flex;align-items:center;gap:10px;">
         <div style="flex:1;"><div class="fl">From</div><input class="fi" id="tip-from" type="time" value="11:00"></div>
         <div style="color:var(--muted);font-size:18px;margin-top:16px;">–</div>
@@ -304,8 +303,12 @@ body{height:100%;background:#0F1117!important;color:#EEE9E3;font-family:'DM Sans
     </div>
     <div class="card" style="margin-bottom:10px;">
       <div class="fg"><div class="fl">Tip Amount ($)</div><input class="fi" id="emp-tip-amount" type="number" value="" min="0" step="1" placeholder="0.00"></div>
-      <div class="fg"><div class="fl">Tip Time</div><input class="fi" id="emp-tip-time" type="time"></div>
-      <button class="abtn" style="width:100%;padding:14px;" onclick="submitEmployeeTip()">Submit Tip</button>
+      <div style="display:flex;align-items:center;gap:10px;">
+        <div style="flex:1;"><div class="fl">From</div><input class="fi" id="emp-tip-from" type="time"></div>
+        <div style="color:var(--muted);font-size:18px;margin-top:16px;">–</div>
+        <div style="flex:1;"><div class="fl">To</div><input class="fi" id="emp-tip-to" type="time"></div>
+      </div>
+      <button class="abtn" style="width:100%;padding:14px;margin-top:12px;" onclick="submitEmployeeTip()">Submit Tip</button>
     </div>
     <div style="margin:0 16px 20px;">
       <div style="font-size:11px;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:10px;">TIPS FOR THIS DAY</div>
@@ -1118,6 +1121,11 @@ function fmtTime(t) {
   const ampm = h >= 12 ? 'PM' : 'AM';
   return `${h % 12 || 12}:${String(m).padStart(2,'0')} ${ampm}`;
 }
+function fmtTimeRange(from, to) {
+  if (!from && !to) return '';
+  if (!to || from === to) return fmtTime(from);
+  return `${fmtTime(from)} – ${fmtTime(to)}`;
+}
 function fmtTipDate(k) {
   if (!k) return '—';
   return new Date(k + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
@@ -1204,8 +1212,6 @@ function renderTips() {
   const ps = document.getElementById('tip-pct-s'), pb = document.getElementById('tip-pct-b');
   if (ps) ps.value = S.tipPcts.server; if (pb) pb.value = S.tipPcts.busboy;
   const tt = document.getElementById('tip-total'); if (tt) tt.value = 0;
-  const ti = document.getElementById('tip-time-input');
-  if (ti && !ti.value) { const now = new Date(); ti.value = now.toTimeString().slice(0,5); }
   S.employees.forEach(e => { if (_tipChecked[e.id] === undefined) _tipChecked[e.id] = false; });
   renderTipsList();
   renderSavedTips();
@@ -1217,9 +1223,11 @@ function renderEmpTipsView() {
   if (!_tipDate) _tipDate = new Date().toISOString().split('T')[0];
   const dd = document.getElementById('emp-tip-date-display');
   if (dd) dd.textContent = fmtTipDate(_tipDate);
-  // Init time input to current time if blank
-  const et = document.getElementById('emp-tip-time');
-  if (et && !et.value) { const now = new Date(); et.value = now.toTimeString().slice(0,5); }
+  // Init From/To to current time if blank
+  const now = new Date(), nowStr = now.toTimeString().slice(0,5);
+  const ef = document.getElementById('emp-tip-from'), eto = document.getElementById('emp-tip-to');
+  if (ef && !ef.value) ef.value = nowStr;
+  if (eto && !eto.value) eto.value = nowStr;
   // Build date strip
   const today = new Date(), days = [];
   for (let i = -3; i <= 6; i++) { const d = new Date(today); d.setDate(d.getDate() + i); days.push(d); }
@@ -1237,19 +1245,31 @@ function renderEmpTipsView() {
   if (!hist) return;
   if (!dayTips.length) { hist.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:8px 0;">No tips saved for this day yet</div>'; return; }
   hist.innerHTML = dayTips.map(t => {
-    const timeStr = t.tipTime ? fmtTime(t.tipTime) : (t.timestamp ? new Date(t.timestamp).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',hour12:true}) : '');
-    const recs = (t.receivers || []).map(id => S.employees.find(e => e.id === id)?.name || '?');
-    const recsStr = recs.length ? recs.join(', ') : '';
+    const timeStr = fmtTimeRange(t.timeFrom || t.tipTime, t.timeTo || t.tipTime);
     const mine = t.submittedBy === _cu;
+    const sel = S.employees.filter(e => t.receivers && t.receivers.includes(e.id));
+    const srvs = sel.filter(e => e.role === 'Server'), bbs = sel.filter(e => e.role === 'Busboy');
+    let asp = 0, abp = 0;
+    if (srvs.length && bbs.length) { asp = t.serverPct; abp = t.busboyPct; }
+    else if (srvs.length) asp = 100; else if (bbs.length) abp = 100;
+    const sp2 = (t.total || 0) * asp / 100, bp2 = (t.total || 0) * abp / 100;
+    const receiverLines = sel.map(e => {
+      const amt = e.role === 'Server' && srvs.length ? sp2 / srvs.length : e.role === 'Busboy' && bbs.length ? bp2 / bbs.length : 0;
+      return `<div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0;"><span style="color:var(--muted);">${e.name}</span><span style="color:var(--green);">$${amt.toFixed(2)}</span></div>`;
+    }).join('');
+    const recsStr = sel.map(e => e.name).join(', ');
     return `<div style="background:var(--card2);border:1px solid ${mine ? 'rgba(245,158,11,.35)' : 'var(--border)'};border-radius:12px;padding:13px 14px;margin-bottom:8px;">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:${recsStr ? '8px' : '0'};">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;">
         <div>
           ${timeStr ? `<div style="font-size:12px;color:var(--amber);font-weight:600;margin-bottom:2px;">${timeStr}</div>` : ''}
           ${t.submittedBy ? `<div style="font-size:11px;color:var(--muted);">by ${t.submittedBy}${mine ? ' (you)' : ''}</div>` : ''}
         </div>
-        <div style="font-size:17px;font-weight:700;color:var(--amber);">$${(t.total ?? t.amount ?? 0).toFixed(2)}</div>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <div style="font-size:17px;font-weight:700;color:var(--amber);">$${(t.total ?? t.amount ?? 0).toFixed(2)}</div>
+          <button onclick="deleteTip('${t.id}')" style="background:none;border:none;color:var(--muted);font-size:18px;cursor:pointer;line-height:1;padding:0 4px;">×</button>
+        </div>
       </div>
-      ${recsStr ? `<div style="font-size:12px;color:var(--muted);border-top:1px solid var(--border);padding-top:7px;">👥 ${recsStr}</div>` : ''}
+      ${recsStr || receiverLines ? `<div style="border-top:1px solid var(--border);margin-top:8px;padding-top:8px;">${receiverLines || `<div style="font-size:12px;color:var(--muted);">${recsStr}</div>`}</div>` : ''}
     </div>`;
   }).join('');
 }
@@ -1258,14 +1278,17 @@ window.submitEmployeeTip = async function() {
   const amount = parseFloat(document.getElementById('emp-tip-amount')?.value) || 0;
   if (amount <= 0) { toast('Enter a tip amount'); return; }
   if (!_tipDate) { toast('Select a date'); return; }
-  const tipTime = document.getElementById('emp-tip-time')?.value || new Date().toTimeString().slice(0,5);
-  const tip = { id: Date.now(), date: _tipDate, amount, submittedBy: _cu, role: _role, tipTime, timestamp: new Date().toISOString() };
+  const timeFrom = document.getElementById('emp-tip-from')?.value || '';
+  const timeTo   = document.getElementById('emp-tip-to')?.value   || '';
+  const tip = { id: Date.now(), date: _tipDate, amount, submittedBy: _cu, role: _role, timeFrom, timeTo, timestamp: new Date().toISOString() };
   showLoader('Submitting…');
   const ok = await apiPOST({ action: 'submitEmployeeTip', adminUser: _adminUser, tip });
   hideLoader();
   if (ok) {
     toast('Tip submitted ✓');
     const el = document.getElementById('emp-tip-amount'); if (el) el.value = '';
+    const ef2 = document.getElementById('emp-tip-from'), et2 = document.getElementById('emp-tip-to');
+    if (ef2) ef2.value = ''; if (et2) et2.value = '';
     const fresh = await loadUserData(_adminUser);
     if (fresh) { S = Object.assign(defData(), fresh); }
     renderEmpTipsView();
@@ -1351,9 +1374,9 @@ function renderSavedTips() {
       const amt = e.role === 'Server' && srvs.length ? sp2 / srvs.length : e.role === 'Busboy' && bbs.length ? bp2 / bbs.length : 0;
       return `<div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0;"><span style="color:var(--muted);">${e.name}</span><span style="color:var(--green);">$${amt.toFixed(2)}</span></div>`;
     }).join('');
-    const timeStr = t.tipTime ? fmtTime(t.tipTime) : '';
+    const timeStr = fmtTimeRange(t.timeFrom || t.tipTime, t.timeTo || t.tipTime);
     const meta = [timeStr, t.submittedBy ? `by ${t.submittedBy}` : ''].filter(Boolean).join(' · ');
-    return `<div class="saved-tip-entry"><div class="saved-tip-header"><div><div style="font-size:15px;font-weight:700;color:var(--amber);">$${(t.total ?? t.amount ?? 0).toFixed(2)}</div>${meta ? `<div style="font-size:11px;color:var(--muted);margin-top:2px;">${meta}</div>` : ''}</div><button class="saved-tip-del" onclick="deleteTip('${t.id}')">×</button></div><div class="saved-tip-names">${recs}</div>${lines}</div>`;
+    return `<div class="saved-tip-entry"><div class="saved-tip-header"><div><div style="font-size:15px;font-weight:700;color:var(--amber);">$${(t.total ?? t.amount ?? 0).toFixed(2)}</div>${meta ? `<div style="font-size:11px;color:var(--muted);margin-top:2px;">${meta}</div>` : ''}</div><button class="saved-tip-del" onclick="deleteTip('${t.id}')">×</button></div>${recs ? `<div class="saved-tip-names">${recs}</div>` : ''}${lines}</div>`;
   }).join('');
 }
 
@@ -1365,16 +1388,28 @@ window.saveTips = function () {
   if (!receivers.length) { toast('Select at least one employee'); return; }
   const sp = parseFloat(document.getElementById('tip-pct-s').value) || 0;
   const bp = parseFloat(document.getElementById('tip-pct-b').value) || 0;
-  const tipTime = document.getElementById('tip-time-input')?.value || new Date().toTimeString().slice(0,5);
-  S.tips.push({ id: Date.now(), date: _tipDate, total, receivers, serverPct: sp, busboyPct: bp, submittedBy: _cu, tipTime, timestamp: new Date().toISOString() });
+  const timeFrom = document.getElementById('tip-from')?.value || '';
+  const timeTo   = document.getElementById('tip-to')?.value   || '';
+  S.tips.push({ id: Date.now(), date: _tipDate, total, receivers, serverPct: sp, busboyPct: bp, submittedBy: _cu, timeFrom, timeTo, timestamp: new Date().toISOString() });
   save();
   toast('Tip entry saved ✓');
   document.getElementById('tip-total').value = 0;
   calcTips(); renderSavedTips(); renderSummary();
 };
-window.deleteTip = function (id) {
-  S.tips = S.tips.filter(t => String(t.id) !== String(id));
-  save(); renderSavedTips(); renderSummary(); toast('Tip removed');
+window.deleteTip = async function (id) {
+  if (_role === 'Admin') {
+    S.tips = S.tips.filter(t => String(t.id) !== String(id));
+    save(); renderSavedTips(); renderSummary(); toast('Tip removed');
+  } else {
+    showLoader('Removing…');
+    const ok = await apiPOST({ action: 'deleteTip', adminUser: _adminUser, tipId: id });
+    hideLoader();
+    if (ok) {
+      const fresh = await loadUserData(_adminUser);
+      if (fresh) { S = Object.assign(defData(), fresh); }
+      renderEmpTipsView(); toast('Tip removed');
+    } else { toast('Failed to remove — try again'); }
+  }
 };
 
 // ════════════════════════════════════════════════════════════════

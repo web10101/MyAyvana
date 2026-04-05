@@ -97,6 +97,16 @@ export default async function handler(req, res) {
         return res.status(200).json({ ok: true });
       }
 
+      if (body.action === 'deleteTip') {
+        if (!body.adminUser || !body.tipId) return res.status(400).json({ ok: false, error: 'adminUser and tipId required' });
+        const adminData = await getBlobContent(userPath(body.adminUser));
+        if (!adminData) return res.status(404).json({ ok: false, error: 'Admin data not found' });
+        adminData.tips = (adminData.tips || []).filter(t => String(t.id) !== String(body.tipId));
+        adminData._ts = Date.now();
+        await saveBlobContent(userPath(body.adminUser), adminData);
+        return res.status(200).json({ ok: true });
+      }
+
       if (body.action === 'deleteUserAccount') {
         if (!body.username) return res.status(400).json({ ok: false, error: 'username required' });
         const accts = await getBlobContent(ACCOUNTS_PATH) ?? {};
