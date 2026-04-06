@@ -1297,38 +1297,42 @@ window.saveTips = async function () {
   const timeFrom = document.getElementById('tip-from')?.value || '';
   const timeTo   = document.getElementById('tip-to')?.value   || '';
   const tip = { id: Date.now(), date: _tipDate, total, receivers, serverPct: sp, busboyPct: bp, submittedBy: _cu, timeFrom, timeTo, timestamp: new Date().toISOString() };
+
+  // Optimistic update — show immediately for everyone
+  if (!Array.isArray(S.tips)) S.tips = [];
+  S.tips.push(tip);
+  document.getElementById('tip-total').value = 0;
+  calcTips(); renderSavedTips(); renderSummary();
+  toast('Tip entry saved ✓');
+
   if (_role === 'Admin') {
-    S.tips.push(tip);
     save();
-    toast('Tip entry saved ✓');
-    document.getElementById('tip-total').value = 0;
-    calcTips(); renderSavedTips(); renderSummary();
   } else {
-    showLoader('Saving…');
     const ok = await apiPOST({ action: 'submitEmployeeTip', adminUser: _adminUser, tip });
-    hideLoader();
-    if (ok) {
-      toast('Tip entry saved ✓');
-      document.getElementById('tip-total').value = 0;
-      const fresh = await loadUserData(_adminUser);
-      if (fresh) { S = Object.assign(defData(), fresh); }
-      calcTips(); renderSavedTips(); renderSummary();
-    } else { toast('Failed to save — try again'); }
+    if (!ok) {
+      S.tips = S.tips.filter(t => String(t.id) !== String(tip.id));
+      renderSavedTips();
+      toast('Failed to save — tip removed');
+    } else {
+      S._ts = Date.now();
+    }
   }
 };
 window.deleteTip = async function (id) {
+  const removed = S.tips.find(t => String(t.id) === String(id));
+  S.tips = S.tips.filter(t => String(t.id) !== String(id));
+  renderSavedTips(); renderSummary(); toast('Tip removed');
+
   if (_role === 'Admin') {
-    S.tips = S.tips.filter(t => String(t.id) !== String(id));
-    save(); renderSavedTips(); renderSummary(); toast('Tip removed');
+    save();
   } else {
-    showLoader('Removing…');
     const ok = await apiPOST({ action: 'deleteTip', adminUser: _adminUser, tipId: id });
-    hideLoader();
-    if (ok) {
-      const fresh = await loadUserData(_adminUser);
-      if (fresh) { S = Object.assign(defData(), fresh); }
-      renderSavedTips(); toast('Tip removed');
-    } else { toast('Failed to remove — try again'); }
+    if (!ok) {
+      if (removed) { S.tips.push(removed); renderSavedTips(); }
+      toast('Failed to remove — tip restored');
+    } else {
+      S._ts = Date.now();
+    }
   }
 };
 
