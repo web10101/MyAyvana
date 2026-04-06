@@ -82,8 +82,10 @@ export default async function handler(req, res) {
 
       if (body.action === 'saveUser') {
         if (!body.user || !body.data) return res.status(400).json({ ok: false, error: 'user and data required' });
+        const ts = Date.now();
+        body.data._ts = ts; // server sets authoritative timestamp
         await saveBlobContent(userPath(body.user), body.data);
-        return res.status(200).json({ ok: true });
+        return res.status(200).json({ ok: true, _ts: ts });
       }
 
       if (body.action === 'submitEmployeeTip') {
