@@ -640,6 +640,7 @@ function hideLoader() {
 function p2(n) { return String(n).padStart(2, '0'); }
 function t2m(t) { const [h, m] = t.split(':').map(Number); return h * 60 + m; }
 function calcH(s, e) { let d = t2m(e) - t2m(s); if (d < 0) d += 1440; return d / 60; }
+function localDateStr(d) { return `${d.getFullYear()}-${p2(d.getMonth()+1)}-${p2(d.getDate())}`; }
 
 function wkStart(off = 0) {
   const d = new Date(), dy = d.getDay();
@@ -1135,10 +1136,10 @@ function updateTipHeader() {
 function buildTipDateStrip() {
   const today = new Date(), days = [];
   for (let i = -3; i <= 6; i++) { const d = new Date(today); d.setDate(d.getDate() + i); days.push(d); }
-  if (!_tipDate) _tipDate = today.toISOString().split('T')[0];
+  if (!_tipDate) _tipDate = localDateStr(today);
   const strip = document.getElementById('tip-date-strip'); if (!strip) return;
   strip.innerHTML = days.map(d => {
-    const k = d.toISOString().split('T')[0], active = k === _tipDate;
+    const k = localDateStr(d), active = k === _tipDate;
     return `<div style="flex-shrink:0;display:flex;flex-direction:column;align-items:center;padding:9px 13px;border-radius:12px;cursor:pointer;min-width:52px;border:1px solid ${active ? 'var(--amber)' : 'var(--border)'};background:${active ? 'var(--amber)' : 'var(--card2)'};" onclick="selTipDate('${k}')">
       <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:${active ? '#000' : 'var(--muted)'};">${d.toLocaleDateString('en-US', { weekday: 'short' })}</div>
       <div style="font-size:17px;font-weight:700;color:${active ? '#000' : 'var(--cream)'};">${d.getDate()}</div>
@@ -1531,7 +1532,7 @@ window.closeM = closeM;
 function _initScreens() {
   const today = new Date();
   _schedDay   = today.getDay() === 0 ? 6 : today.getDay() - 1;
-  _tipDate    = today.toISOString().split('T')[0];
+  _tipDate    = localDateStr(today);
   _tipChecked = {};
   const adminOnly = ['home','employees','schedule','summary'];
   adminOnly.forEach(t => {
