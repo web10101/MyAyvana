@@ -1309,7 +1309,9 @@ function renderSavedTips() {
   }).join('');
   const dayTotal = dayTips.reduce((s, t) => s + (t.total ?? t.amount ?? 0), 0);
   c.innerHTML += `<div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px;padding-top:12px;border-top:1px solid var(--border);"><span style="font-size:13px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:1px;">Day Total</span><span style="font-size:18px;font-weight:700;color:var(--amber);">$${dayTotal.toFixed(2)}</span></div>`;
-} = async function () {
+}
+
+window.saveTips = async function () {
   const total = parseFloat(document.getElementById('tip-total').value) || 0;
   if (total <= 0) { toast('Enter a tip amount'); return; }
   if (!_tipDate)  { toast('Select a date');      return; }
