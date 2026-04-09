@@ -1307,9 +1307,9 @@ function renderSavedTips() {
     const meta = [timeStr, t.submittedBy ? `by ${t.submittedBy}` : ''].filter(Boolean).join(' · ');
     return `<div class="saved-tip-entry"><div class="saved-tip-header"><div><div style="font-size:15px;font-weight:700;color:var(--amber);">$${(t.total ?? t.amount ?? 0).toFixed(2)}</div>${meta ? `<div style="font-size:11px;color:var(--muted);margin-top:2px;">${meta}</div>` : ''}</div><button class="saved-tip-del" onclick="deleteTip('${t.id}')">×</button></div>${recs ? `<div class="saved-tip-names">${recs}</div>` : ''}${lines}</div>`;
   }).join('');
-}
-
-window.saveTips = async function () {
+  const dayTotal = dayTips.reduce((s, t) => s + (t.total ?? t.amount ?? 0), 0);
+  c.innerHTML += `<div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px;padding-top:12px;border-top:1px solid var(--border);"><span style="font-size:13px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:1px;">Day Total</span><span style="font-size:18px;font-weight:700;color:var(--amber);">$${dayTotal.toFixed(2)}</span></div>`;
+} = async function () {
   const total = parseFloat(document.getElementById('tip-total').value) || 0;
   if (total <= 0) { toast('Enter a tip amount'); return; }
   if (!_tipDate)  { toast('Select a date');      return; }
