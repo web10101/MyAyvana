@@ -254,6 +254,11 @@ body{height:100%;background:#0F1117!important;color:#EEE9E3;font-family:'DM Sans
           <div style="font-size:17px;font-weight:700;color:var(--amber);" id="tip-time-display">11:00 – 23:00</div>
         </div>
       </div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+        <button onclick="changeTipWeek(-1)" style="background:var(--card2);border:1px solid var(--border);color:var(--cream);border-radius:8px;padding:4px 12px;font-size:18px;cursor:pointer;line-height:1;">‹</button>
+        <div style="font-size:12px;color:var(--muted);font-weight:600;" id="tip-week-lbl"></div>
+        <button onclick="changeTipWeek(1)" style="background:var(--card2);border:1px solid var(--border);color:var(--cream);border-radius:8px;padding:4px 12px;font-size:18px;cursor:pointer;line-height:1;">›</button>
+      </div>
       <div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:14px;scrollbar-width:none;" id="tip-date-strip"></div>
       <div style="display:flex;align-items:center;gap:10px;">
         <div style="flex:1;"><div class="fl">From</div><input class="fi" id="tip-from" type="time" value="11:00"></div>
@@ -600,7 +605,7 @@ function save(immediate = false) {
 }
 
 let _eid = 1, _editId = null, _shiftEid = null, _shiftDk = null,
-    _schedDay = 0, _tipDate = null, _tipChecked = {},
+    _schedDay = 0, _tipDate = null, _tipChecked = {}, _tipWeekOff = 0,
     _notesDate = null, _confirmCb = null;
 
 const DAYS = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
@@ -922,7 +927,7 @@ function empWages(eid, off) {
   return parseFloat(empWeekH(eid, off)) * (e.role === 'Busboy' ? S.rates.busboy : S.rates.server);
 }
 function empTips(eid, off) {
-  const s = wkStart(off), en = new Date(s); en.setDate(en.getDate() + 6);
+  const s = wkStart(off), en = new Date(s); en.setDate(en.getDate() + 6); en.setHours(23, 59, 59, 999);
   let tot = 0;
   S.tips.forEach(t => {
     const d = new Date(t.date + 'T12:00:00');
@@ -1134,9 +1139,12 @@ function updateTipHeader() {
   const td = document.getElementById('tip-time-display'); if (td) td.textContent = `${from} – ${to}`;
 }
 function buildTipDateStrip() {
-  const today = new Date(), days = [];
-  for (let i = -3; i <= 6; i++) { const d = new Date(today); d.setDate(d.getDate() + i); days.push(d); }
+  const today = new Date();
   if (!_tipDate) _tipDate = localDateStr(today);
+  const s = wkStart(_tipWeekOff);
+  const days = Array.from({ length: 7 }, (_, i) => { const d = new Date(s); d.setDate(d.getDate() + i); return d; });
+  const wlEl = document.getElementById('tip-week-lbl');
+  if (wlEl) wlEl.textContent = wkLbl(_tipWeekOff);
   const strip = document.getElementById('tip-date-strip'); if (!strip) return;
   strip.innerHTML = days.map(d => {
     const k = localDateStr(d), active = k === _tipDate;
@@ -1146,6 +1154,14 @@ function buildTipDateStrip() {
     </div>`;
   }).join('');
 }
+window.changeTipWeek = function (d) {
+  _tipWeekOff += d;
+  // Select Monday of the new week if current _tipDate is outside it
+  const s = wkStart(_tipWeekOff), en = new Date(s); en.setDate(en.getDate() + 6); en.setHours(23, 59, 59, 999);
+  const td = new Date(_tipDate + 'T12:00:00');
+  if (td < s || td > en) { _tipDate = localDateStr(s); }
+  buildTipDateStrip(); updateTipHeader(); renderTipsList(); renderSavedTips();
+};
 window.selTipDate = function (k) {
   S.employees.forEach(e => { if (_tipChecked[e.id] === 'auto') _tipChecked[e.id] = false; });
   _tipDate = k;
@@ -1533,6 +1549,7 @@ function _initScreens() {
   const today = new Date();
   _schedDay   = today.getDay() === 0 ? 6 : today.getDay() - 1;
   _tipDate    = localDateStr(today);
+  _tipWeekOff = 0;
   _tipChecked = {};
   const adminOnly = ['home','employees','schedule','summary'];
   adminOnly.forEach(t => {
