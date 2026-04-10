@@ -117,7 +117,8 @@ export default async function handler(req, res) {
         if (!adminData) return res.status(404).json({ ok: false, error: 'Admin data not found' });
         if (!Array.isArray(adminData.tips)) adminData.tips = [];
         adminData.tips.push(body.tip);
-        adminData._ts = Date.now();
+        const ts = Date.now();
+        adminData._ts = ts;
         await saveBlobContent(userPath(body.adminUser), adminData);
         return res.status(200).json({ ok: true, _ts: adminData._ts });
       }
@@ -127,7 +128,8 @@ export default async function handler(req, res) {
         const adminData = await getBlobContent(userPath(body.adminUser));
         if (!adminData) return res.status(404).json({ ok: false, error: 'Admin data not found' });
         adminData.tips = (adminData.tips || []).filter(t => String(t.id) !== String(body.tipId));
-        adminData._ts = Date.now();
+        const ts = Date.now();
+        adminData._ts = ts;
         await saveBlobContent(userPath(body.adminUser), adminData);
         return res.status(200).json({ ok: true, _ts: adminData._ts });
       }

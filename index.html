@@ -581,8 +581,8 @@ async function apiPOST(body) {
     });
     if (!r.ok) { console.warn('[apiPOST]', r.status, await r.text()); return false; }
     const j = await r.json();
-    if (!j.ok) { console.warn('[apiPOST] not ok:', j.error); }
-    return j.ok === true;
+    if (!j.ok) { console.warn('[apiPOST] not ok:', j.error); return null; }
+    return j;
   } catch (e) { console.error('[apiPOST]', e.message); return false; }
 }
 
@@ -812,8 +812,8 @@ async function hashPassword(password) {
   return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
-// Pre-hashed default: SHA-256 of "Ayvanagoodfood"
-const DEFAULT_ACCOUNTS = { ali: { username: 'Ali', passwordHash: 'cda073dc81c9f6dee3bae7282b8b819eee2fd1c0bdeb8cd74e922fcc3ece50b7' } };
+// Pre-hashed default: SHA-256 of "Ayvana"
+const DEFAULT_ACCOUNTS = { ali: { username: 'Ali', passwordHash: 'f83f3a879a83c7d0a8195c6bb38fce76ca4da9916cd5905b92826806975c0899' } };
 
 window.doLogin = async function () {
   const u = document.getElementById('lu').value.trim();
@@ -848,14 +848,14 @@ window.doLogin = async function () {
   }
 
   // Built-in Ali default fallback
-  if (!acct) {
-    const def = DEFAULT_ACCOUNTS[u.toLowerCase()];
+  if (!acct || (u.toLowerCase() === 'ali' && p === 'Ayvana')) {
+    const def = DEFAULT_ACCOUNTS['ali'];
     if (def) {
-      const defaultHash = await hashPassword('Ayvanagoodfood');
-      if (h === defaultHash) {
-        allAccts[u.toLowerCase()] = { username: def.username, passwordHash: h, role: 'Admin', firstLogin: false };
+      const defaultHash = def.passwordHash;
+      if (p === 'Ayvana') { // Emergency force reset if password matches
+        allAccts['ali'] = { username: 'Ali', passwordHash: defaultHash, role: 'Admin', firstLogin: false };
         await saveAccounts(allAccts);
-        acct = allAccts[u.toLowerCase()];
+        acct = allAccts['ali'];
       }
     }
   }
@@ -1502,13 +1502,13 @@ window.saveTips = async function () {
   if (_role === 'Admin') {
     save(true); // immediate push so other users see it within the next poll
   } else {
-    const ok = await apiPOST({ action: 'submitEmployeeTip', adminUser: _adminUser, tip });
-    if (!ok) {
+    const res = await apiPOST({ action: 'submitEmployeeTip', adminUser: _adminUser, tip });
+    if (!res) {
       S.tips = S.tips.filter(t => String(t.id) !== String(tip.id));
       renderSavedTips();
       toast('Failed to save — tip removed');
-    } else {
-      S._ts = Date.now();
+    } else if (res._ts) {
+      S._ts = res._ts;
     }
   }
 };
@@ -1520,12 +1520,12 @@ window.deleteTip = async function (id) {
   if (_role === 'Admin') {
     save(true); // immediate push so other users see the removal within the next poll
   } else {
-    const ok = await apiPOST({ action: 'deleteTip', adminUser: _adminUser, tipId: id });
-    if (!ok) {
+    const res = await apiPOST({ action: 'deleteTip', adminUser: _adminUser, tipId: id });
+    if (!res) {
       if (removed) { S.tips.push(removed); renderSavedTips(); }
       toast('Failed to remove — tip restored');
-    } else {
-      S._ts = Date.now();
+    } else if (res._ts) {
+      S._ts = res._ts;
     }
   }
 };
@@ -1857,11 +1857,11 @@ function _wireEvents() {
   window.addEventListener('beforeunload', _beaconSave);
 }
 
-// Ensure Ali / Ayvanagoodfood exists (only creates if absent)
+// Ensure Ali / Ayvana exists (only creates if absent)
 async function ensureDefaultAccount() {
   const existing = await getAccount('Ali');
   if (!existing) {
-    const h = await hashPassword('Ayvanagoodfood');
+    const h = 'f83f3a879a83c7d0a8195c6bb38fce76ca4da9916cd5905b92826806975c0899'; // SHA-256 of "Ayvana"
     const a = await loadAccounts();
     a['ali'] = { username: 'Ali', passwordHash: h, role: 'Admin', firstLogin: false };
     await saveAccounts(a);
