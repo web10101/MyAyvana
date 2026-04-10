@@ -82,6 +82,14 @@ export default async function handler(req, res) {
 
       if (body.action === 'saveUser') {
         if (!body.user || !body.data) return res.status(400).json({ ok: false, error: 'user and data required' });
+        // Preserve sharedNotes and _snTs from the current blob — notes are managed
+        // exclusively via addSharedNote/updateSharedNote/deleteSharedNote to avoid
+        // race conditions where a regular save would wipe notes added by other users.
+        const existing = await getBlobContent(userPath(body.user));
+        if (existing) {
+          if (existing.sharedNotes) body.data.sharedNotes = existing.sharedNotes;
+          if (existing._snTs) body.data._snTs = existing._snTs;
+        }
         const ts = Date.now();
         body.data._ts = ts; // server sets authoritative timestamp
         await saveBlobContent(userPath(body.user), body.data);
@@ -117,8 +125,9 @@ export default async function handler(req, res) {
         if (!Array.isArray(adminData.sharedNotes[body.date])) adminData.sharedNotes[body.date] = [];
         adminData.sharedNotes[body.date].push(body.note);
         adminData._ts = Date.now();
+        adminData._snTs = adminData._ts;
         await saveBlobContent(userPath(body.adminUser), adminData);
-        return res.status(200).json({ ok: true, _ts: adminData._ts });
+        return res.status(200).json({ ok: true, _ts: adminData._ts, _snTs: adminData._snTs });
       }
 
       if (body.action === 'updateSharedNote') {
@@ -128,8 +137,9 @@ export default async function handler(req, res) {
         const n = (adminData.sharedNotes?.[body.date] || []).find(x => String(x.id) === String(body.noteId));
         if (n) { if (body.text !== undefined) n.text = body.text; if (body.done !== undefined) n.done = body.done; }
         adminData._ts = Date.now();
+        adminData._snTs = adminData._ts;
         await saveBlobContent(userPath(body.adminUser), adminData);
-        return res.status(200).json({ ok: true, _ts: adminData._ts });
+        return res.status(200).json({ ok: true, _ts: adminData._ts, _snTs: adminData._snTs });
       }
 
       if (body.action === 'deleteSharedNote') {
@@ -138,8 +148,9 @@ export default async function handler(req, res) {
         if (!adminData) return res.status(404).json({ ok: false, error: 'Admin data not found' });
         if (adminData.sharedNotes?.[body.date]) adminData.sharedNotes[body.date] = adminData.sharedNotes[body.date].filter(n => String(n.id) !== String(body.noteId));
         adminData._ts = Date.now();
+        adminData._snTs = adminData._ts;
         await saveBlobContent(userPath(body.adminUser), adminData);
-        return res.status(200).json({ ok: true, _ts: adminData._ts });
+        return res.status(200).json({ ok: true, _ts: adminData._ts, _snTs: adminData._snTs });
       }
 
       if (body.action === 'deleteUserAccount') {

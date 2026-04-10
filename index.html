@@ -815,10 +815,15 @@ window.doLogin = async function () {
       if (!_cu || document.visibilityState !== 'visible') return;
       const target = _role === 'Admin' ? _cu : _adminUser;
       const prevTs = S._ts || 0;
+      const prevSnTs = S._snTs || 0;
       const fresh = await apiGET({ action: 'getUser', user: target });
       if (fresh && fresh._ts > prevTs) {
         S = Object.assign(defData(), fresh);
         if (document.getElementById('screen-tips')?.classList.contains('active')) renderSavedTips();
+        if (document.getElementById('shared-notes-modal')?.classList.contains('open')) renderSnb();
+      } else if (fresh && (fresh._snTs || 0) > prevSnTs) {
+        S.sharedNotes = fresh.sharedNotes || {};
+        S._snTs = fresh._snTs;
         if (document.getElementById('shared-notes-modal')?.classList.contains('open')) renderSnb();
       }
     }, 3000);
@@ -1582,37 +1587,35 @@ window.addSharedNote = async function () {
   S.sharedNotes[_sharedNotesDate].push(note);
   renderSnb();
   setTimeout(() => { const ins = document.querySelectorAll('#snb-lines .note-ti'); if (ins.length) ins[ins.length-1].focus(); }, 50);
-  if (_role === 'Admin') { save(true); }
-  else {
-    const res = await apiPOSTFull({ action:'addSharedNote', adminUser:_adminUser, date:_sharedNotesDate, note });
-    if (res) S._ts = res._ts;
-    else { S.sharedNotes[_sharedNotesDate] = S.sharedNotes[_sharedNotesDate].filter(n => n.id !== note.id); renderSnb(); toast('Failed to add note'); }
-  }
+  const snTarget = _role === 'Admin' ? _cu : _adminUser;
+  const res = await apiPOSTFull({ action:'addSharedNote', adminUser:snTarget, date:_sharedNotesDate, note });
+  if (res) { S._ts = res._ts; S._snTs = res._snTs; if (_role === 'Admin') cacheUserData(_cu, S); }
+  else { S.sharedNotes[_sharedNotesDate] = S.sharedNotes[_sharedNotesDate].filter(n => n.id !== note.id); renderSnb(); toast('Failed to add note'); }
 };
 window.toggleSharedNote = async function (k, id) {
   const n = (S.sharedNotes?.[k] || []).find(x => String(x.id) === String(id)); if (!n) return;
   n.done = !n.done; renderSnb();
-  if (_role === 'Admin') { save(); }
-  else { const res = await apiPOSTFull({ action:'updateSharedNote', adminUser:_adminUser, date:k, noteId:id, done:n.done }); if (res) S._ts = res._ts; }
+  const snTarget = _role === 'Admin' ? _cu : _adminUser;
+  const res = await apiPOSTFull({ action:'updateSharedNote', adminUser:snTarget, date:k, noteId:id, done:n.done });
+  if (res) { S._ts = res._ts; S._snTs = res._snTs; if (_role === 'Admin') cacheUserData(_cu, S); }
 };
 window.updSharedNote = async function (k, id, txt) {
   if (!txt.trim()) { delSharedNote(k, id); return; }
   const n = (S.sharedNotes?.[k] || []).find(x => String(x.id) === String(id)); if (!n) return;
   n.text = txt;
-  if (_role === 'Admin') { save(); }
-  else { const res = await apiPOSTFull({ action:'updateSharedNote', adminUser:_adminUser, date:k, noteId:id, text:txt }); if (res) S._ts = res._ts; }
+  const snTarget = _role === 'Admin' ? _cu : _adminUser;
+  const res = await apiPOSTFull({ action:'updateSharedNote', adminUser:snTarget, date:k, noteId:id, text:txt });
+  if (res) { S._ts = res._ts; S._snTs = res._snTs; if (_role === 'Admin') cacheUserData(_cu, S); }
 };
 window.delSharedNote = async function (k, id) {
   if (!S.sharedNotes?.[k]) return;
   const removed = S.sharedNotes[k].find(n => String(n.id) === String(id));
   S.sharedNotes[k] = S.sharedNotes[k].filter(n => String(n.id) !== String(id));
   renderSnb();
-  if (_role === 'Admin') { save(true); }
-  else {
-    const res = await apiPOSTFull({ action:'deleteSharedNote', adminUser:_adminUser, date:k, noteId:id });
-    if (res) S._ts = res._ts;
-    else { if (removed) { if (!S.sharedNotes[k]) S.sharedNotes[k]=[]; S.sharedNotes[k].push(removed); renderSnb(); } }
-  }
+  const snTarget = _role === 'Admin' ? _cu : _adminUser;
+  const res = await apiPOSTFull({ action:'deleteSharedNote', adminUser:snTarget, date:k, noteId:id });
+  if (res) { S._ts = res._ts; S._snTs = res._snTs; if (_role === 'Admin') cacheUserData(_cu, S); }
+  else { if (removed) { if (!S.sharedNotes[k]) S.sharedNotes[k]=[]; S.sharedNotes[k].push(removed); renderSnb(); } }
 };
 
 // ════════════════════════════════════════════════════════════════
@@ -1805,16 +1808,22 @@ window.onload = async function () {
       document.getElementById('app').classList.add('visible');
       _initScreens();
 
-      // Start background polling for auto-sync every 30 seconds
+      // Start background polling for auto-sync every 3 seconds
       if (window._syncInterval) clearInterval(window._syncInterval);
       window._syncInterval = setInterval(async () => {
         if (!_cu || document.visibilityState !== 'visible') return;
         const target = _role === 'Admin' ? _cu : _adminUser;
         const prevTs = S._ts || 0;
+        const prevSnTs = S._snTs || 0;
         const fresh = await apiGET({ action: 'getUser', user: target });
         if (fresh && fresh._ts > prevTs) {
           S = Object.assign(defData(), fresh);
           if (document.getElementById('screen-tips')?.classList.contains('active')) renderSavedTips();
+          if (document.getElementById('shared-notes-modal')?.classList.contains('open')) renderSnb();
+        } else if (fresh && (fresh._snTs || 0) > prevSnTs) {
+          S.sharedNotes = fresh.sharedNotes || {};
+          S._snTs = fresh._snTs;
+          if (document.getElementById('shared-notes-modal')?.classList.contains('open')) renderSnb();
         }
       }, 3000);
 
