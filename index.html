@@ -886,10 +886,9 @@ window.saveEmployee = function () {
     toast('Employee added ✓');
     (async () => {
       const a = await loadAccounts();
-      if (!a[name.toLowerCase()]) {
-        a[name.toLowerCase()] = { username: name, passwordHash: null, role, firstLogin: true };
-        await saveAccounts(a);
-      }
+      // Always overwrite — clears old password if this name was used before
+      a[name.toLowerCase()] = { username: name, passwordHash: null, role, firstLogin: true };
+      await saveAccounts(a);
     })();
   }
 };
@@ -902,7 +901,14 @@ window.removeEmp = function (id) {
     async () => {
       S.employees = S.employees.filter(x => x.id !== id);
       save(); renderEmployees(); renderHome(); toast('Employee removed');
-      if (e) await apiPOST({ action: 'deleteUserAccount', username: e.name });
+      if (e) {
+        // Reliably wipe from accounts.json client-side first
+        const a = await loadAccounts();
+        delete a[e.name.toLowerCase()];
+        await saveAccounts(a);
+        // Also clean up their data blob server-side (fire-and-forget)
+        apiPOST({ action: 'deleteUserAccount', username: e.name });
+      }
     }
   );
 };
