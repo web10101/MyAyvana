@@ -502,8 +502,8 @@ async function apiPOST(body) {
     });
     if (!r.ok) { console.warn('[apiPOST]', r.status, await r.text()); return false; }
     const j = await r.json();
-    if (!j.ok) { console.warn('[apiPOST] not ok:', j.error); }
-    return j.ok === true;
+    if (!j.ok) { console.warn('[apiPOST] not ok:', j.error); return null; }
+    return j;
   } catch (e) { console.error('[apiPOST]', e.message); return false; }
 }
 
@@ -1399,13 +1399,13 @@ window.saveTips = async function () {
   if (_role === 'Admin') {
     save(true); // immediate push so other users see it within the next poll
   } else {
-    const ok = await apiPOST({ action: 'submitEmployeeTip', adminUser: _adminUser, tip });
-    if (!ok) {
+    const res = await apiPOST({ action: 'submitEmployeeTip', adminUser: _adminUser, tip });
+    if (!res) {
       S.tips = S.tips.filter(t => String(t.id) !== String(tip.id));
       renderSavedTips();
       toast('Failed to save — tip removed');
-    } else {
-      S._ts = Date.now();
+    } else if (res._ts) {
+      S._ts = res._ts;
     }
   }
 };
@@ -1417,12 +1417,12 @@ window.deleteTip = async function (id) {
   if (_role === 'Admin') {
     save(true); // immediate push so other users see the removal within the next poll
   } else {
-    const ok = await apiPOST({ action: 'deleteTip', adminUser: _adminUser, tipId: id });
-    if (!ok) {
+    const res = await apiPOST({ action: 'deleteTip', adminUser: _adminUser, tipId: id });
+    if (!res) {
       if (removed) { S.tips.push(removed); renderSavedTips(); }
       toast('Failed to remove — tip restored');
-    } else {
-      S._ts = Date.now();
+    } else if (res._ts) {
+      S._ts = res._ts;
     }
   }
 };
@@ -1570,23 +1570,23 @@ window.addSharedNote = async function () {
   setTimeout(() => { const ins = document.querySelectorAll('#snb-lines .note-ti'); if (ins.length) ins[ins.length-1].focus(); }, 50);
   if (_role === 'Admin') { save(true); }
   else {
-    const ok = await apiPOST({ action:'addSharedNote', adminUser:_adminUser, date:_sharedNotesDate, note });
-    if (ok) S._ts = Date.now();
-    else { S.sharedNotes[_sharedNotesDate] = S.sharedNotes[_sharedNotesDate].filter(n => n.id !== note.id); renderSnb(); toast('Failed to add note'); }
+    const res = await apiPOST({ action:'addSharedNote', adminUser:_adminUser, date:_sharedNotesDate, note });
+    if (res && res._ts) S._ts = res._ts;
+    else if (!res) { S.sharedNotes[_sharedNotesDate] = S.sharedNotes[_sharedNotesDate].filter(n => n.id !== note.id); renderSnb(); toast('Failed to add note'); }
   }
 };
 window.toggleSharedNote = async function (k, id) {
   const n = (S.sharedNotes?.[k] || []).find(x => String(x.id) === String(id)); if (!n) return;
   n.done = !n.done; renderSnb();
   if (_role === 'Admin') { save(); }
-  else { const ok = await apiPOST({ action:'updateSharedNote', adminUser:_adminUser, date:k, noteId:id, done:n.done }); if (ok) S._ts = Date.now(); }
+  else { const res = await apiPOST({ action:'updateSharedNote', adminUser:_adminUser, date:k, noteId:id, done:n.done }); if (res && res._ts) S._ts = res._ts; }
 };
 window.updSharedNote = async function (k, id, txt) {
   if (!txt.trim()) { delSharedNote(k, id); return; }
   const n = (S.sharedNotes?.[k] || []).find(x => String(x.id) === String(id)); if (!n) return;
   n.text = txt;
   if (_role === 'Admin') { save(); }
-  else { const ok = await apiPOST({ action:'updateSharedNote', adminUser:_adminUser, date:k, noteId:id, text:txt }); if (ok) S._ts = Date.now(); }
+  else { const res = await apiPOST({ action:'updateSharedNote', adminUser:_adminUser, date:k, noteId:id, text:txt }); if (res && res._ts) S._ts = res._ts; }
 };
 window.delSharedNote = async function (k, id) {
   if (!S.sharedNotes?.[k]) return;
@@ -1595,9 +1595,9 @@ window.delSharedNote = async function (k, id) {
   renderSnb();
   if (_role === 'Admin') { save(true); }
   else {
-    const ok = await apiPOST({ action:'deleteSharedNote', adminUser:_adminUser, date:k, noteId:id });
-    if (ok) S._ts = Date.now();
-    else { if (removed) { if (!S.sharedNotes[k]) S.sharedNotes[k]=[]; S.sharedNotes[k].push(removed); renderSnb(); } }
+    const res = await apiPOST({ action:'deleteSharedNote', adminUser:_adminUser, date:k, noteId:id });
+    if (res && res._ts) S._ts = res._ts;
+    else if (!res) { if (removed) { if (!S.sharedNotes[k]) S.sharedNotes[k]=[]; S.sharedNotes[k].push(removed); renderSnb(); } }
   }
 };
 

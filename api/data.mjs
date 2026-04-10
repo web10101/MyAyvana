@@ -94,9 +94,10 @@ export default async function handler(req, res) {
         if (!adminData) return res.status(404).json({ ok: false, error: 'Admin data not found' });
         if (!Array.isArray(adminData.tips)) adminData.tips = [];
         adminData.tips.push(body.tip);
-        adminData._ts = Date.now();
+        const ts = Date.now();
+        adminData._ts = ts;
         await saveBlobContent(userPath(body.adminUser), adminData);
-        return res.status(200).json({ ok: true });
+        return res.status(200).json({ ok: true, _ts: ts });
       }
 
       if (body.action === 'deleteTip') {
@@ -104,9 +105,10 @@ export default async function handler(req, res) {
         const adminData = await getBlobContent(userPath(body.adminUser));
         if (!adminData) return res.status(404).json({ ok: false, error: 'Admin data not found' });
         adminData.tips = (adminData.tips || []).filter(t => String(t.id) !== String(body.tipId));
-        adminData._ts = Date.now();
+        const ts = Date.now();
+        adminData._ts = ts;
         await saveBlobContent(userPath(body.adminUser), adminData);
-        return res.status(200).json({ ok: true });
+        return res.status(200).json({ ok: true, _ts: ts });
       }
 
       if (body.action === 'addSharedNote') {
@@ -116,9 +118,10 @@ export default async function handler(req, res) {
         if (!adminData.sharedNotes) adminData.sharedNotes = {};
         if (!Array.isArray(adminData.sharedNotes[body.date])) adminData.sharedNotes[body.date] = [];
         adminData.sharedNotes[body.date].push(body.note);
-        adminData._ts = Date.now();
+        const ts = Date.now();
+        adminData._ts = ts;
         await saveBlobContent(userPath(body.adminUser), adminData);
-        return res.status(200).json({ ok: true });
+        return res.status(200).json({ ok: true, _ts: ts });
       }
 
       if (body.action === 'updateSharedNote') {
@@ -127,9 +130,10 @@ export default async function handler(req, res) {
         if (!adminData) return res.status(404).json({ ok: false, error: 'Admin data not found' });
         const n = (adminData.sharedNotes?.[body.date] || []).find(x => String(x.id) === String(body.noteId));
         if (n) { if (body.text !== undefined) n.text = body.text; if (body.done !== undefined) n.done = body.done; }
-        adminData._ts = Date.now();
+        const ts = Date.now();
+        adminData._ts = ts;
         await saveBlobContent(userPath(body.adminUser), adminData);
-        return res.status(200).json({ ok: true });
+        return res.status(200).json({ ok: true, _ts: ts });
       }
 
       if (body.action === 'deleteSharedNote') {
@@ -137,9 +141,10 @@ export default async function handler(req, res) {
         const adminData = await getBlobContent(userPath(body.adminUser));
         if (!adminData) return res.status(404).json({ ok: false, error: 'Admin data not found' });
         if (adminData.sharedNotes?.[body.date]) adminData.sharedNotes[body.date] = adminData.sharedNotes[body.date].filter(n => String(n.id) !== String(body.noteId));
-        adminData._ts = Date.now();
+        const ts = Date.now();
+        adminData._ts = ts;
         await saveBlobContent(userPath(body.adminUser), adminData);
-        return res.status(200).json({ ok: true });
+        return res.status(200).json({ ok: true, _ts: ts });
       }
 
       if (body.action === 'deleteUserAccount') {
