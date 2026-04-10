@@ -838,9 +838,21 @@ window.saveEmployee = function () {
   const name = document.getElementById('emp-name').value.trim();
   const role = document.getElementById('emp-role').value;
   if (!name) { toast('Please enter a name'); return; }
+  const dup = S.employees.some(x => x.name.toLowerCase() === name.toLowerCase() && x.id !== _editId);
+  if (dup) { toast('A team member with that name already exists'); return; }
   if (_editId) {
     const e = S.employees.find(x => x.id === _editId);
-    if (e) { e.name = name; e.role = role; }
+    if (e) {
+      const oldName = e.name;
+      e.name = name; e.role = role;
+      if (oldName.toLowerCase() !== name.toLowerCase()) {
+        (async () => {
+          const a = await loadAccounts();
+          const old = a[oldName.toLowerCase()];
+          if (old) { delete a[oldName.toLowerCase()]; a[name.toLowerCase()] = { ...old, username: name }; await saveAccounts(a); }
+        })();
+      }
+    }
     save(); closeM('emp-modal'); renderEmployees(); renderHome();
     toast('Updated ✓');
   } else {
