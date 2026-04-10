@@ -717,6 +717,20 @@ window.doLogin = async function () {
     await saveAccounts(allAccts);
   }
 
+  // No account found — check if username matches an employee name (auto-create on first login)
+  if (!acct) {
+    const adminAcct = Object.values(allAccts).find(a => a.role === 'Admin');
+    if (adminAcct) {
+      const adminData = await apiGET({ action: 'getUser', user: adminAcct.username });
+      const emp = adminData?.employees?.find(e => e.name.toLowerCase() === u.toLowerCase());
+      if (emp) {
+        acct = { username: emp.name, passwordHash: h, role: emp.role, firstLogin: false };
+        allAccts[u.toLowerCase()] = acct;
+        await saveAccounts(allAccts);
+      }
+    }
+  }
+
   // Built-in Ali default fallback
   if (!acct) {
     const def = DEFAULT_ACCOUNTS[u.toLowerCase()];
