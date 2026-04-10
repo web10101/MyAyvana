@@ -96,7 +96,7 @@ export default async function handler(req, res) {
         adminData.tips.push(body.tip);
         adminData._ts = Date.now();
         await saveBlobContent(userPath(body.adminUser), adminData);
-        return res.status(200).json({ ok: true });
+        return res.status(200).json({ ok: true, _ts: adminData._ts });
       }
 
       if (body.action === 'deleteTip') {
@@ -106,7 +106,7 @@ export default async function handler(req, res) {
         adminData.tips = (adminData.tips || []).filter(t => String(t.id) !== String(body.tipId));
         adminData._ts = Date.now();
         await saveBlobContent(userPath(body.adminUser), adminData);
-        return res.status(200).json({ ok: true });
+        return res.status(200).json({ ok: true, _ts: adminData._ts });
       }
 
       if (body.action === 'addSharedNote') {
@@ -118,7 +118,7 @@ export default async function handler(req, res) {
         adminData.sharedNotes[body.date].push(body.note);
         adminData._ts = Date.now();
         await saveBlobContent(userPath(body.adminUser), adminData);
-        return res.status(200).json({ ok: true });
+        return res.status(200).json({ ok: true, _ts: adminData._ts });
       }
 
       if (body.action === 'updateSharedNote') {
@@ -129,7 +129,7 @@ export default async function handler(req, res) {
         if (n) { if (body.text !== undefined) n.text = body.text; if (body.done !== undefined) n.done = body.done; }
         adminData._ts = Date.now();
         await saveBlobContent(userPath(body.adminUser), adminData);
-        return res.status(200).json({ ok: true });
+        return res.status(200).json({ ok: true, _ts: adminData._ts });
       }
 
       if (body.action === 'deleteSharedNote') {
@@ -139,7 +139,7 @@ export default async function handler(req, res) {
         if (adminData.sharedNotes?.[body.date]) adminData.sharedNotes[body.date] = adminData.sharedNotes[body.date].filter(n => String(n.id) !== String(body.noteId));
         adminData._ts = Date.now();
         await saveBlobContent(userPath(body.adminUser), adminData);
-        return res.status(200).json({ ok: true });
+        return res.status(200).json({ ok: true, _ts: adminData._ts });
       }
 
       if (body.action === 'deleteUserAccount') {

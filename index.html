@@ -507,6 +507,20 @@ async function apiPOST(body) {
   } catch (e) { console.error('[apiPOST]', e.message); return false; }
 }
 
+async function apiPOSTFull(body) {
+  try {
+    const r = await fetch(API, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify(body),
+    });
+    if (!r.ok) { console.warn('[apiPOSTFull]', r.status, await r.text()); return null; }
+    const j = await r.json();
+    if (!j.ok) { console.warn('[apiPOSTFull] not ok:', j.error); return null; }
+    return j;
+  } catch (e) { console.error('[apiPOSTFull]', e.message); return null; }
+}
+
 // ── Accounts  →  Vercel Blob ayvana/accounts.json ─────────────────
 async function loadAccounts() {
   // Blob first (authoritative), localStorage as fallback
@@ -1570,8 +1584,8 @@ window.addSharedNote = async function () {
   setTimeout(() => { const ins = document.querySelectorAll('#snb-lines .note-ti'); if (ins.length) ins[ins.length-1].focus(); }, 50);
   if (_role === 'Admin') { save(true); }
   else {
-    const ok = await apiPOST({ action:'addSharedNote', adminUser:_adminUser, date:_sharedNotesDate, note });
-    if (ok) S._ts = Date.now();
+    const res = await apiPOSTFull({ action:'addSharedNote', adminUser:_adminUser, date:_sharedNotesDate, note });
+    if (res) S._ts = res._ts;
     else { S.sharedNotes[_sharedNotesDate] = S.sharedNotes[_sharedNotesDate].filter(n => n.id !== note.id); renderSnb(); toast('Failed to add note'); }
   }
 };
@@ -1579,14 +1593,14 @@ window.toggleSharedNote = async function (k, id) {
   const n = (S.sharedNotes?.[k] || []).find(x => String(x.id) === String(id)); if (!n) return;
   n.done = !n.done; renderSnb();
   if (_role === 'Admin') { save(); }
-  else { const ok = await apiPOST({ action:'updateSharedNote', adminUser:_adminUser, date:k, noteId:id, done:n.done }); if (ok) S._ts = Date.now(); }
+  else { const res = await apiPOSTFull({ action:'updateSharedNote', adminUser:_adminUser, date:k, noteId:id, done:n.done }); if (res) S._ts = res._ts; }
 };
 window.updSharedNote = async function (k, id, txt) {
   if (!txt.trim()) { delSharedNote(k, id); return; }
   const n = (S.sharedNotes?.[k] || []).find(x => String(x.id) === String(id)); if (!n) return;
   n.text = txt;
   if (_role === 'Admin') { save(); }
-  else { const ok = await apiPOST({ action:'updateSharedNote', adminUser:_adminUser, date:k, noteId:id, text:txt }); if (ok) S._ts = Date.now(); }
+  else { const res = await apiPOSTFull({ action:'updateSharedNote', adminUser:_adminUser, date:k, noteId:id, text:txt }); if (res) S._ts = res._ts; }
 };
 window.delSharedNote = async function (k, id) {
   if (!S.sharedNotes?.[k]) return;
@@ -1595,8 +1609,8 @@ window.delSharedNote = async function (k, id) {
   renderSnb();
   if (_role === 'Admin') { save(true); }
   else {
-    const ok = await apiPOST({ action:'deleteSharedNote', adminUser:_adminUser, date:k, noteId:id });
-    if (ok) S._ts = Date.now();
+    const res = await apiPOSTFull({ action:'deleteSharedNote', adminUser:_adminUser, date:k, noteId:id });
+    if (res) S._ts = res._ts;
     else { if (removed) { if (!S.sharedNotes[k]) S.sharedNotes[k]=[]; S.sharedNotes[k].push(removed); renderSnb(); } }
   }
 };
