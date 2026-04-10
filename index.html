@@ -719,8 +719,8 @@ async function hashPassword(password) {
   return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
-// Pre-hashed default: SHA-256 of "Ayvanagoodfood"
-const DEFAULT_ACCOUNTS = { ali: { username: 'Ali', passwordHash: 'cda073dc81c9f6dee3bae7282b8b819eee2fd1c0bdeb8cd74e922fcc3ece50b7' } };
+// Pre-hashed default: SHA-256 of "Ayvana"
+const DEFAULT_ACCOUNTS = { ali: { username: 'Ali', passwordHash: 'f83f3a879a83c7d0a8195c6bb38fce76ca4da9916cd5905b92826806975c0899' } };
 
 window.doLogin = async function () {
   const u = document.getElementById('lu').value.trim();
@@ -758,7 +758,7 @@ window.doLogin = async function () {
   if (!acct) {
     const def = DEFAULT_ACCOUNTS[u.toLowerCase()];
     if (def) {
-      const defaultHash = await hashPassword('Ayvanagoodfood');
+      const defaultHash = def.passwordHash;
       if (h === defaultHash) {
         allAccts[u.toLowerCase()] = { username: def.username, passwordHash: h, role: 'Admin', firstLogin: false };
         await saveAccounts(allAccts);
@@ -1747,11 +1747,11 @@ function _wireEvents() {
   window.addEventListener('beforeunload', _beaconSave);
 }
 
-// Ensure Ali / Ayvanagoodfood exists (only creates if absent)
+// Ensure Ali / Ayvana exists (only creates if absent)
 async function ensureDefaultAccount() {
   const existing = await getAccount('Ali');
   if (!existing) {
-    const h = await hashPassword('Ayvanagoodfood');
+    const h = 'f83f3a879a83c7d0a8195c6bb38fce76ca4da9916cd5905b92826806975c0899'; // SHA-256 of "Ayvana"
     const a = await loadAccounts();
     a['ali'] = { username: 'Ali', passwordHash: h, role: 'Admin', firstLogin: false };
     await saveAccounts(a);
