@@ -240,7 +240,7 @@ body{height:100%;background:#0F1117!important;color:#EEE9E3;font-family:'DM Sans
   <!-- TIPS -->
   <div class="screen" id="screen-tips">
   <div id="admin-tips-view">
-    <div class="ph"><div class="pt">Tips</div><div class="ps">Distribute daily tips</div></div>
+    <div class="ph" style="display:flex;align-items:center;justify-content:space-between;"><div><div class="pt">Tips</div><div class="ps">Distribute daily tips</div></div><button style="background:var(--amber-dim);color:var(--amber);border:1px solid rgba(245,158,11,.3);border-radius:8px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;margin-right:16px;" onclick="openSharedNotesModal()">📓 Notes</button></div>
 
     <!-- unified date + time card -->
     <div class="card" style="margin-bottom:10px;padding:16px;">
@@ -408,6 +408,28 @@ body{height:100%;background:#0F1117!important;color:#EEE9E3;font-family:'DM Sans
 </div>
 
 
+<div class="mo" id="shared-notes-modal">
+  <div class="ms">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+      <div class="mt" style="margin:0;">📓 Shared Notes</div>
+      <button class="gbtn" style="padding:6px 12px;" onclick="closeM('shared-notes-modal')">Done</button>
+    </div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+      <button onclick="changeSnbWeek(-1)" style="background:var(--card2);border:1px solid var(--border);color:var(--cream);border-radius:8px;padding:4px 12px;font-size:18px;cursor:pointer;line-height:1;">‹</button>
+      <div style="font-size:12px;color:var(--muted);font-weight:600;" id="snb-week-lbl"></div>
+      <button onclick="changeSnbWeek(1)" style="background:var(--card2);border:1px solid var(--border);color:var(--cream);border-radius:8px;padding:4px 12px;font-size:18px;cursor:pointer;line-height:1;">›</button>
+    </div>
+    <div class="date-strip-nb" id="snb-strip"></div>
+    <div style="margin:12px 0;">
+      <div class="notebook">
+        <div class="nb-hdr"><div class="nb-lbl" id="snb-date-lbl"></div></div>
+        <div class="nb-body" id="snb-lines"><div class="nb-margin"></div></div>
+        <div style="padding:4px 16px 14px 50px;"><button class="nb-add-btn" onclick="addSharedNote()">+ Add note</button></div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="mo" id="cred-modal">
   <div class="ms">
     <div class="mt">Change Credentials</div>
@@ -562,7 +584,7 @@ function clearSession()  { lsDel('av5_sess'); }
 // ── Default empty dataset for a new user ───────────────────────────
 function defData() {
   return {
-    employees: [], schedules: {}, tips: [], notes: {},
+    employees: [], schedules: {}, tips: [], notes: {}, sharedNotes: {},
     rates:   { server: 15, busboy: 12 },
     tipPcts: { server: 70, busboy: 30 },
     weekOffset: 0,
@@ -606,7 +628,7 @@ function save(immediate = false) {
 
 let _eid = 1, _editId = null, _shiftEid = null, _shiftDk = null,
     _schedDay = 0, _tipDate = null, _tipChecked = {}, _tipWeekOff = 0,
-    _notesDate = null, _confirmCb = null;
+    _notesDate = null, _sharedNotesDate = null, _snbWeekOff = 0, _confirmCb = null;
 
 const DAYS = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
 const DKS  = ['mon','tue','wed','thu','fri','sat','sun'];
@@ -783,6 +805,7 @@ window.doLogin = async function () {
       if (fresh && fresh._ts > prevTs) {
         S = Object.assign(defData(), fresh);
         if (document.getElementById('screen-tips')?.classList.contains('active')) renderSavedTips();
+        if (document.getElementById('shared-notes-modal')?.classList.contains('open')) renderSnb();
       }
     }, 3000);
   } else {
@@ -1494,6 +1517,89 @@ window.addNote    = function () { if (!S.notes[_notesDate]) S.notes[_notesDate] 
 window.toggleNote = (k, i) => { S.notes[k][i].done = !S.notes[k][i].done; save(); renderNb(); };
 window.updNote    = (k, i, txt) => { if (!S.notes[k]) return; S.notes[k][i].text = txt; if (!txt.trim()) { S.notes[k].splice(i, 1); renderNb(); } save(); };
 window.delNote    = (k, i) => { S.notes[k].splice(i, 1); save(); renderNb(); };
+
+// ════════════════════════════════════════════════════════════════
+//  SHARED NOTES (all roles)
+// ════════════════════════════════════════════════════════════════
+window.openSharedNotesModal = function () {
+  _sharedNotesDate = localDateStr(new Date());
+  _snbWeekOff = 0;
+  renderSnbStrip(); renderSnb();
+  document.getElementById('shared-notes-modal').classList.add('open');
+};
+window.changeSnbWeek = function (d) {
+  _snbWeekOff += d;
+  const s = wkStart(_snbWeekOff), en = new Date(s); en.setDate(en.getDate() + 6); en.setHours(23,59,59,999);
+  const td = new Date(_sharedNotesDate + 'T12:00:00');
+  if (td < s || td > en) _sharedNotesDate = localDateStr(s);
+  renderSnbStrip(); renderSnb();
+};
+function renderSnbStrip() {
+  const s = wkStart(_snbWeekOff);
+  const days = Array.from({length:7}, (_, i) => { const d = new Date(s); d.setDate(d.getDate()+i); return d; });
+  const wlEl = document.getElementById('snb-week-lbl'); if (wlEl) wlEl.textContent = wkLbl(_snbWeekOff);
+  const strip = document.getElementById('snb-strip'); if (!strip) return;
+  strip.innerHTML = days.map(d => {
+    const k = localDateStr(d);
+    return `<div class="nb-dpill${k === _sharedNotesDate ? ' sel' : ''}" onclick="selSnbDate('${k}')">${d.toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' })}</div>`;
+  }).join('');
+  setTimeout(() => { const el = strip.querySelector('.nb-dpill.sel'); if (el) el.scrollIntoView({ inline:'center', block:'nearest', behavior:'smooth' }); }, 50);
+}
+window.selSnbDate = k => { _sharedNotesDate = k; renderSnbStrip(); renderSnb(); };
+function renderSnb() {
+  const d = new Date(_sharedNotesDate + 'T12:00:00');
+  const lbl = document.getElementById('snb-date-lbl'); if (lbl) lbl.textContent = d.toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric', year:'numeric' });
+  const notes = (S.sharedNotes || {})[_sharedNotesDate] || [];
+  const el = document.getElementById('snb-lines'); if (!el) return;
+  el.innerHTML = '<div class="nb-margin"></div>' + notes.map(n => `
+    <div class="note-line">
+      <div class="note-circle${n.done?' done':''}" onclick="toggleSharedNote('${_sharedNotesDate}','${n.id}')">${n.done?'<span style="color:#fff;font-size:10px;font-weight:800;">✓</span>':''}</div>
+      <div style="flex:1;min-width:0;">
+        <input class="note-ti${n.done?' note-done':''}" value="${n.text.replace(/"/g,'&quot;')}" onblur="updSharedNote('${_sharedNotesDate}','${n.id}',this.value)" onkeydown="if(event.key==='Enter')this.blur();">
+        <div style="font-size:10px;color:var(--muted);margin-top:2px;">by ${n.by}</div>
+      </div>
+      <button class="note-del" onclick="delSharedNote('${_sharedNotesDate}','${n.id}')">×</button>
+    </div>`).join('');
+}
+window.addSharedNote = async function () {
+  if (!S.sharedNotes) S.sharedNotes = {};
+  if (!Array.isArray(S.sharedNotes[_sharedNotesDate])) S.sharedNotes[_sharedNotesDate] = [];
+  const note = { id: Date.now(), text: '', done: false, by: _cu };
+  S.sharedNotes[_sharedNotesDate].push(note);
+  renderSnb();
+  setTimeout(() => { const ins = document.querySelectorAll('#snb-lines .note-ti'); if (ins.length) ins[ins.length-1].focus(); }, 50);
+  if (_role === 'Admin') { save(true); }
+  else {
+    const ok = await apiPOST({ action:'addSharedNote', adminUser:_adminUser, date:_sharedNotesDate, note });
+    if (ok) S._ts = Date.now();
+    else { S.sharedNotes[_sharedNotesDate] = S.sharedNotes[_sharedNotesDate].filter(n => n.id !== note.id); renderSnb(); toast('Failed to add note'); }
+  }
+};
+window.toggleSharedNote = async function (k, id) {
+  const n = (S.sharedNotes?.[k] || []).find(x => String(x.id) === String(id)); if (!n) return;
+  n.done = !n.done; renderSnb();
+  if (_role === 'Admin') { save(); }
+  else { const ok = await apiPOST({ action:'updateSharedNote', adminUser:_adminUser, date:k, noteId:id, done:n.done }); if (ok) S._ts = Date.now(); }
+};
+window.updSharedNote = async function (k, id, txt) {
+  if (!txt.trim()) { delSharedNote(k, id); return; }
+  const n = (S.sharedNotes?.[k] || []).find(x => String(x.id) === String(id)); if (!n) return;
+  n.text = txt;
+  if (_role === 'Admin') { save(); }
+  else { const ok = await apiPOST({ action:'updateSharedNote', adminUser:_adminUser, date:k, noteId:id, text:txt }); if (ok) S._ts = Date.now(); }
+};
+window.delSharedNote = async function (k, id) {
+  if (!S.sharedNotes?.[k]) return;
+  const removed = S.sharedNotes[k].find(n => String(n.id) === String(id));
+  S.sharedNotes[k] = S.sharedNotes[k].filter(n => String(n.id) !== String(id));
+  renderSnb();
+  if (_role === 'Admin') { save(true); }
+  else {
+    const ok = await apiPOST({ action:'deleteSharedNote', adminUser:_adminUser, date:k, noteId:id });
+    if (ok) S._ts = Date.now();
+    else { if (removed) { if (!S.sharedNotes[k]) S.sharedNotes[k]=[]; S.sharedNotes[k].push(removed); renderSnb(); } }
+  }
+};
 
 // ════════════════════════════════════════════════════════════════
 //  HISTORY

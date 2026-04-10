@@ -109,6 +109,39 @@ export default async function handler(req, res) {
         return res.status(200).json({ ok: true });
       }
 
+      if (body.action === 'addSharedNote') {
+        if (!body.adminUser || !body.date || !body.note) return res.status(400).json({ ok: false, error: 'adminUser, date, note required' });
+        const adminData = await getBlobContent(userPath(body.adminUser));
+        if (!adminData) return res.status(404).json({ ok: false, error: 'Admin data not found' });
+        if (!adminData.sharedNotes) adminData.sharedNotes = {};
+        if (!Array.isArray(adminData.sharedNotes[body.date])) adminData.sharedNotes[body.date] = [];
+        adminData.sharedNotes[body.date].push(body.note);
+        adminData._ts = Date.now();
+        await saveBlobContent(userPath(body.adminUser), adminData);
+        return res.status(200).json({ ok: true });
+      }
+
+      if (body.action === 'updateSharedNote') {
+        if (!body.adminUser || !body.date || body.noteId == null) return res.status(400).json({ ok: false, error: 'adminUser, date, noteId required' });
+        const adminData = await getBlobContent(userPath(body.adminUser));
+        if (!adminData) return res.status(404).json({ ok: false, error: 'Admin data not found' });
+        const n = (adminData.sharedNotes?.[body.date] || []).find(x => String(x.id) === String(body.noteId));
+        if (n) { if (body.text !== undefined) n.text = body.text; if (body.done !== undefined) n.done = body.done; }
+        adminData._ts = Date.now();
+        await saveBlobContent(userPath(body.adminUser), adminData);
+        return res.status(200).json({ ok: true });
+      }
+
+      if (body.action === 'deleteSharedNote') {
+        if (!body.adminUser || !body.date || body.noteId == null) return res.status(400).json({ ok: false, error: 'adminUser, date, noteId required' });
+        const adminData = await getBlobContent(userPath(body.adminUser));
+        if (!adminData) return res.status(404).json({ ok: false, error: 'Admin data not found' });
+        if (adminData.sharedNotes?.[body.date]) adminData.sharedNotes[body.date] = adminData.sharedNotes[body.date].filter(n => String(n.id) !== String(body.noteId));
+        adminData._ts = Date.now();
+        await saveBlobContent(userPath(body.adminUser), adminData);
+        return res.status(200).json({ ok: true });
+      }
+
       if (body.action === 'deleteUserAccount') {
         if (!body.username) return res.status(400).json({ ok: false, error: 'username required' });
         const accts = await getBlobContent(ACCOUNTS_PATH) ?? {};
