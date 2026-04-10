@@ -1589,7 +1589,7 @@ window.addSharedNote = async function () {
   setTimeout(() => { const ins = document.querySelectorAll('#snb-lines .note-ti'); if (ins.length) ins[ins.length-1].focus(); }, 50);
   const snTarget = _role === 'Admin' ? _cu : _adminUser;
   const res = await apiPOSTFull({ action:'addSharedNote', adminUser:snTarget, date:_sharedNotesDate, note });
-  if (res) { S._ts = res._ts; S._snTs = res._snTs; if (_role === 'Admin') cacheUserData(_cu, S); }
+  if (res) { S._snTs = res._snTs; if (_role === 'Admin') cacheUserData(_cu, S); }
   else { S.sharedNotes[_sharedNotesDate] = S.sharedNotes[_sharedNotesDate].filter(n => n.id !== note.id); renderSnb(); toast('Failed to add note'); }
 };
 window.toggleSharedNote = async function (k, id) {
@@ -1597,7 +1597,7 @@ window.toggleSharedNote = async function (k, id) {
   n.done = !n.done; renderSnb();
   const snTarget = _role === 'Admin' ? _cu : _adminUser;
   const res = await apiPOSTFull({ action:'updateSharedNote', adminUser:snTarget, date:k, noteId:id, done:n.done });
-  if (res) { S._ts = res._ts; S._snTs = res._snTs; if (_role === 'Admin') cacheUserData(_cu, S); }
+  if (res) { S._snTs = res._snTs; if (_role === 'Admin') cacheUserData(_cu, S); }
 };
 window.updSharedNote = async function (k, id, txt) {
   if (!txt.trim()) { delSharedNote(k, id); return; }
@@ -1605,7 +1605,7 @@ window.updSharedNote = async function (k, id, txt) {
   n.text = txt;
   const snTarget = _role === 'Admin' ? _cu : _adminUser;
   const res = await apiPOSTFull({ action:'updateSharedNote', adminUser:snTarget, date:k, noteId:id, text:txt });
-  if (res) { S._ts = res._ts; S._snTs = res._snTs; if (_role === 'Admin') cacheUserData(_cu, S); }
+  if (res) { S._snTs = res._snTs; if (_role === 'Admin') cacheUserData(_cu, S); }
 };
 window.delSharedNote = async function (k, id) {
   if (!S.sharedNotes?.[k]) return;
@@ -1614,7 +1614,7 @@ window.delSharedNote = async function (k, id) {
   renderSnb();
   const snTarget = _role === 'Admin' ? _cu : _adminUser;
   const res = await apiPOSTFull({ action:'deleteSharedNote', adminUser:snTarget, date:k, noteId:id });
-  if (res) { S._ts = res._ts; S._snTs = res._snTs; if (_role === 'Admin') cacheUserData(_cu, S); }
+  if (res) { S._snTs = res._snTs; if (_role === 'Admin') cacheUserData(_cu, S); }
   else { if (removed) { if (!S.sharedNotes[k]) S.sharedNotes[k]=[]; S.sharedNotes[k].push(removed); renderSnb(); } }
 };
 
