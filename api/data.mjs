@@ -21,8 +21,8 @@ async function getBlobContent(pathname) {
     const blob = blobs.find(b => b.pathname === pathname);
     if (!blob) return null;
     
-    // Fetch the actual content using a cache-busting query parameter
-    const res = await fetch(`${blob.url}?t=${Date.now()}`);
+    // Bypass CDN cache entirely so we always read the latest version
+    const res = await fetch(blob.url, { cache: 'no-store' });
     if (!res.ok) return null;
     return await res.json();
   } catch (err) {
