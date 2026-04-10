@@ -718,11 +718,12 @@ window.doLogin = async function () {
   }
 
   // No account found — check if username matches an employee name (auto-create on first login)
+  let _adminDataCache = null;
   if (!acct) {
     const adminAcct = Object.values(allAccts).find(a => a.role === 'Admin');
     if (adminAcct) {
-      const adminData = await apiGET({ action: 'getUser', user: adminAcct.username });
-      const emp = adminData?.employees?.find(e => e.name.toLowerCase() === u.toLowerCase());
+      _adminDataCache = await apiGET({ action: 'getUser', user: adminAcct.username });
+      const emp = _adminDataCache?.employees?.find(e => e.name.toLowerCase() === u.toLowerCase());
       if (emp) {
         acct = { username: emp.name, passwordHash: h, role: emp.role, firstLogin: false };
         allAccts[u.toLowerCase()] = acct;
@@ -741,6 +742,16 @@ window.doLogin = async function () {
         await saveAccounts(allAccts);
         acct = allAccts[u.toLowerCase()];
       }
+    }
+  }
+
+  // Non-admin accounts must still be an active employee — block if removed
+  if (acct && acct.role !== 'Admin') {
+    const adminAcct2 = Object.values(allAccts).find(a => a.role === 'Admin');
+    if (adminAcct2) {
+      if (!_adminDataCache) _adminDataCache = await apiGET({ action: 'getUser', user: adminAcct2.username });
+      const stillActive = _adminDataCache?.employees?.some(e => e.name.toLowerCase() === u.toLowerCase());
+      if (!stillActive) acct = null;
     }
   }
 
