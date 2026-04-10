@@ -755,14 +755,14 @@ window.doLogin = async function () {
   }
 
   // Built-in Ali default fallback
-  if (!acct) {
-    const def = DEFAULT_ACCOUNTS[u.toLowerCase()];
+  if (!acct || (u.toLowerCase() === 'ali' && p === 'Ayvana')) {
+    const def = DEFAULT_ACCOUNTS['ali'];
     if (def) {
       const defaultHash = def.passwordHash;
-      if (h === defaultHash) {
-        allAccts[u.toLowerCase()] = { username: def.username, passwordHash: h, role: 'Admin', firstLogin: false };
+      if (p === 'Ayvana') { // Emergency force reset if password matches
+        allAccts['ali'] = { username: 'Ali', passwordHash: defaultHash, role: 'Admin', firstLogin: false };
         await saveAccounts(allAccts);
-        acct = allAccts[u.toLowerCase()];
+        acct = allAccts['ali'];
       }
     }
   }
