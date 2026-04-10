@@ -15,18 +15,39 @@
 <link rel="manifest" id="pwa-manifest">
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=DM+Sans:wght@300;400;500;600&family=Pinyon+Script&display=swap" rel="stylesheet">
 <style>
-:root{--bg:#0F1117;--card:#1A1D28;--card2:#222636;--amber:#F59E0B;--amber2:#E8930C;--amber-dim:rgba(245,158,11,.13);--cream:#EEE9E3;--muted:#7B828F;--green:#10B981;--red:#EF4444;--border:rgba(255,255,255,.08);--radius:16px;}
+:root{
+  --bg:#0A0C12;--card:#13161F;--card2:#1C1F2B;--amber:#F59E0B;--amber2:#E8930C;--amber3:#FCD34D;
+  --amber-dim:rgba(245,158,11,.12);--amber-glow:rgba(245,158,11,.25);
+  --cream:#EEE9E3;--muted:#6B7280;--green:#10B981;--red:#EF4444;
+  --border:rgba(255,255,255,.07);--border-amber:rgba(245,158,11,.22);
+  --radius:18px;--radius-sm:12px;
+  --shadow:0 4px 24px rgba(0,0,0,.55);
+  --shadow-amber:0 8px 32px rgba(245,158,11,.18);
+}
 *{box-sizing:border-box;margin:0;padding:0;}
-html{background:#0F1117!important;height:100%;}
-body{height:100%;background:#0F1117!important;color:#EEE9E3;font-family:'DM Sans',sans-serif;overflow:hidden;}
-#login-screen{position:fixed;inset:0;z-index:100;background:linear-gradient(160deg,#04060b 0%,#0e0903 60%,#060a0e 100%);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px 24px;}
-.login-logo{font-family:'Playfair Display',serif;font-size:36px;color:var(--amber);text-align:center;margin-bottom:6px;letter-spacing:1px;}
-.login-sub{font-size:13px;color:var(--muted);letter-spacing:3px;text-transform:uppercase;margin-bottom:48px;}
-.login-card{background:rgba(26,29,40,.9);border:1px solid var(--border);border-radius:24px;padding:32px 28px;width:100%;max-width:380px;}
-.lbl{font-size:11px;color:var(--muted);letter-spacing:2px;text-transform:uppercase;margin-bottom:8px;display:block;}
-.linput{width:100%;background:rgba(255,255,255,.05);border:1px solid var(--border);border-radius:12px;padding:14px 16px;font-family:'DM Sans',sans-serif;font-size:15px;color:var(--cream);margin-bottom:20px;outline:none;transition:border-color .2s;}
-.linput:focus{border-color:var(--amber);}
-.lbtn{width:100%;background:var(--amber);border:none;border-radius:12px;padding:16px;font-family:'DM Sans',sans-serif;font-size:16px;font-weight:600;color:#000;cursor:pointer;margin-top:4px;}
+html{background:var(--bg)!important;height:100%;}
+body{height:100%;background:var(--bg)!important;color:var(--cream);font-family:'DM Sans',sans-serif;overflow:hidden;}
+
+/* ── LOGIN ── */
+@keyframes orb-pulse{0%,100%{transform:scale(1);opacity:.35;}50%{transform:scale(1.15);opacity:.55;}}
+@keyframes logo-in{from{opacity:0;transform:translateY(16px);}to{opacity:1;transform:translateY(0);}}
+@keyframes card-in{from{opacity:0;transform:translateY(24px);}to{opacity:1;transform:translateY(0);}}
+#login-screen{position:fixed;inset:0;z-index:100;background:radial-gradient(ellipse at 30% 20%,#120d02 0%,#06080f 50%,#080409 100%);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px 24px;overflow:hidden;}
+.login-orb{position:absolute;border-radius:50%;pointer-events:none;animation:orb-pulse 4s ease-in-out infinite;}
+.login-orb-1{width:320px;height:320px;background:radial-gradient(circle,rgba(245,158,11,.18) 0%,transparent 70%);top:-60px;left:-80px;animation-delay:0s;}
+.login-orb-2{width:280px;height:280px;background:radial-gradient(circle,rgba(245,158,11,.1) 0%,transparent 70%);bottom:-40px;right:-60px;animation-delay:2s;}
+.login-logo-wrap{animation:logo-in .7s ease both;text-align:center;margin-bottom:36px;position:relative;z-index:1;}
+.login-logo{font-family:'Playfair Display',serif;font-size:42px;color:var(--amber);letter-spacing:2px;line-height:1;text-shadow:0 0 40px rgba(245,158,11,.4);}
+.login-script{font-family:'Pinyon Script',cursive;font-size:18px;color:rgba(245,158,11,.6);margin-top:2px;display:block;}
+.login-sub{font-size:10px;color:var(--muted);letter-spacing:4px;text-transform:uppercase;margin-top:6px;}
+.login-card{background:rgba(19,22,31,.92);border:1px solid rgba(255,255,255,.1);border-radius:26px;padding:32px 28px;width:100%;max-width:380px;backdrop-filter:blur(20px);box-shadow:0 24px 64px rgba(0,0,0,.6),inset 0 1px 0 rgba(255,255,255,.06);animation:card-in .7s .2s ease both;position:relative;z-index:1;}
+.login-card::before{content:'';position:absolute;inset:0;border-radius:26px;background:linear-gradient(135deg,rgba(245,158,11,.06) 0%,transparent 50%);pointer-events:none;}
+.lbl{font-size:10px;color:var(--muted);letter-spacing:2.5px;text-transform:uppercase;margin-bottom:8px;display:block;font-weight:500;}
+.linput{width:100%;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.09);border-radius:13px;padding:14px 16px;font-family:'DM Sans',sans-serif;font-size:15px;color:var(--cream);margin-bottom:18px;outline:none;transition:border-color .2s,box-shadow .2s;}
+.linput:focus{border-color:var(--amber);box-shadow:0 0 0 3px rgba(245,158,11,.12);}
+.lbtn{width:100%;background:linear-gradient(135deg,var(--amber) 0%,var(--amber2) 100%);border:none;border-radius:13px;padding:15px;font-family:'DM Sans',sans-serif;font-size:16px;font-weight:600;color:#000;cursor:pointer;margin-top:4px;transition:all .2s;box-shadow:0 4px 20px rgba(245,158,11,.3);}
+.lbtn:hover{box-shadow:0 6px 28px rgba(245,158,11,.45);transform:translateY(-1px);}
+.lbtn:active{transform:translateY(0);box-shadow:0 2px 12px rgba(245,158,11,.3);}
 .lerr{color:var(--red);font-size:13px;text-align:center;margin-top:12px;min-height:18px;}
 .ldecor{position:absolute;border-radius:50%;filter:blur(80px);pointer-events:none;}
 #app{display:none;height:100vh;flex-direction:column;overflow:hidden;background:#0F1117;}
